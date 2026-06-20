@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Aurora (dark) — indigo canvas, violet + teal accents, mint/rose for
+ * up/down. Sora throughout. Matches the Aurora design handoff.
+ */
+:root {
+  --font-sans: "Sora", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  --font-serif: "Sora", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Sora", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Light fallback (used only if a user switches to light) */
+  --background: 233 39% 95%;
+  --foreground: 232 33% 14%;
+  --card: 0 0% 100%;
+  --card-foreground: 232 33% 14%;
+  --muted: 233 36% 92%;
+  --muted-foreground: 231 16% 42%;
+  --faint: 231 16% 55%;
+  --primary: 256 68% 62%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 255 100% 95%;
+  --accent-foreground: 256 45% 40%;
+  --border: 233 30% 88%;
+  --input: 233 28% 85%;
+  --ring: 256 68% 62%;
+  --positive: 158 64% 38%;
+  --negative: 350 63% 48%;
+  --violet: 255 92% 76%;
+  --teal: 162 68% 67%;
+  --radius: 1.1rem;
+}
+
+/* The design: dark Aurora (default) */
+.dark {
+  --background: 230 35% 7%; /* #0b0d17 */
+  --foreground: 233 39% 95%; /* #edeef7 */
+  --card: 230 28% 11%;
+  --card-foreground: 233 39% 95%;
+  --muted: 230 22% 16%;
+  --muted-foreground: 231 18% 61%; /* #8a8fab */
+  --faint: 231 16% 40%; /* #565b78 */
+  --primary: 255 92% 76%; /* #a78bfa */
+  --primary-foreground: 230 35% 9%;
+  --accent: 250 30% 22%;
+  --accent-foreground: 255 90% 92%;
+  --border: 230 22% 19%;
+  --input: 230 22% 22%;
+  --ring: 255 92% 76%;
+  --positive: 150 70% 69%; /* #79e7b0 */
+  --negative: 0 71% 80%; /* #f0a6a6 */
+  --violet: 255 92% 76%;
+  --teal: 162 68% 67%; /* #6ee7d0 */
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Editorial headings (Sora) */
+h1,
+h2,
+h3,
+.font-serif {
+  font-family: var(--font-serif);
+  letter-spacing: -0.015em;
+  font-weight: 600;
+}
+
+/* Tabular figures (Sora tnum) */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Uppercase eyebrow label */
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: hsl(var(--faint));
+  font-weight: 600;
+}
+
+.text-faint {
+  color: hsl(var(--faint));
+}
+
+/* Ambient aurora glows for the dark canvas */
+.aurora-bg {
+  position: relative;
+}
+.aurora-bg::before,
+.aurora-bg::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+}
+.aurora-bg::before {
+  top: -180px;
+  left: 18%;
+  width: 620px;
+  height: 420px;
+  background: radial-gradient(ellipse, hsl(255 92% 76% / 0.16), transparent 70%);
+}
+.aurora-bg::after {
+  top: 100px;
+  right: -120px;
+  width: 520px;
+  height: 420px;
+  background: radial-gradient(ellipse, hsl(162 68% 67% / 0.1), transparent 70%);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: hsl(var(--muted));
+}
+.skeleton::after {
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--card) / 0.4),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
+  content: "";
+}

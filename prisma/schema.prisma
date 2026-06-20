@@ -1,0 +1,251 @@
+// Portfolio Tracker - Prisma schema
+// Database: SQLite (zero-setup local dev; no DB server required)
+//
+// Notes:
+// - SQLite does not support Prisma enums, so enum-like columns are stored as
+//   String with documented allowed values (mirrored by the union types in
+//   src/lib/enums.ts). Switching back to PostgreSQL later only requires
+//   changing the datasource and (optionally) reintroducing enums.
+// - Every user-owned record carries a `userId` and cascades on user deletion.
+// - `PriceQuote` and `FxRate` are global market-data caches keyed by symbol /
+//   currency pair.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Auth / user
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  image        String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  settings          UserSettings?
+  brokerConnections BrokerConnection[]
+  holdings          Holding[]
+  watchlists        Watchlist[]
+  importJobs        ImportJob[]
+  syncLogs          SyncLog[]
+  passwordResets    PasswordResetToken[]
+  snapshots         PortfolioSnapshot[]
+
+  @@index([email])
+}
+
+model UserSettings {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  baseCurrency  String   @default("USD")
+  // PriceInterval: MANUAL | M5 | M15 | M30 | H1 | DAILY
+  priceInterval String   @default("MANUAL")
+  theme         String   @default("system") // "light" | "dark" | "system"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Broker connections
+// ---------------------------------------------------------------------------
+
+model BrokerConnection {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // BrokerProvider: TRADING212 | IBKR | MANUAL
+  provider String
+  label    String?
+  // BrokerEnvironment: LIVE | DEMO
+  environment String @default("LIVE")
+  // AES-256-GCM encrypted token payload. NEVER returned to the client.
+  encryptedToken String?
+  // SyncStatus: PENDING | SUCCESS | PARTIAL | FAILED
+  status          String    @default("PENDING")
+  lastSyncAt      DateTime?
+  lastSyncMessage String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  holdings Holding[]
+  syncLogs SyncLog[]
+
+  @@unique([userId, provider, environment])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Holdings
+// ---------------------------------------------------------------------------
+
+model Holding {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Display ticker as the user/broker knows it (e.g. "189", "AAPL", "009150.KS")
+  symbol String
+  // Yahoo Finance compatible symbol used for quotes (e.g. "0189.HK")
+  yahooSymbol String
+  name        String?
+  exchange    String?
+  isin        String?
+  currency    String // native currency (e.g. KRW, HKD, USD)
+  quantity    Float
+  avgCost     Float  @default(0) // in native currency
+  // HoldingSource: MANUAL | TRADING212 | IBKR
+  source             String            @default("MANUAL")
+  brokerConnectionId String?
+  brokerConnection   BrokerConnection? @relation(fields: [brokerConnectionId], references: [id], onDelete: SetNull)
+  accountName        String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  // Prevents accidental duplicates of the same instrument from the same source.
+  @@unique([userId, yahooSymbol, source])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Watchlists
+// ---------------------------------------------------------------------------
+
+model Watchlist {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String          @default("My Watchlist")
+  isDefault Boolean         @default(false)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  items     WatchlistItem[]
+
+  @@index([userId])
+}
+
+model WatchlistItem {
+  id          String    @id @default(cuid())
+  watchlistId String
+  watchlist   Watchlist @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  symbol      String
+  yahooSymbol String
+  name        String?
+  exchange    String?
+  currency    String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([watchlistId, yahooSymbol])
+  @@index([watchlistId])
+}
+
+// ---------------------------------------------------------------------------
+// Market data caches (global, not user-scoped)
+// ---------------------------------------------------------------------------
+
+model PriceQuote {
+  id            String   @id @default(cuid())
+  yahooSymbol   String   @unique
+  currency      String?
+  price         Float?
+  previousClose Float?
+  change        Float?
+  changePercent Float?
+  marketState   String?
+  shortName     String?
+  exchange      String?
+  asOf          DateTime @default(now())
+  stale         Boolean  @default(false)
+
+  @@index([yahooSymbol])
+}
+
+model FxRate {
+  id    String   @id @default(cuid())
+  base  String
+  quote String
+  rate  Float
+  asOf  DateTime @default(now())
+
+  @@unique([base, quote])
+  @@index([base, quote])
+}
+
+// ---------------------------------------------------------------------------
+// Jobs / audit
+// ---------------------------------------------------------------------------
+
+model ImportJob {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // ImportType: IBKR_CSV | BASKET_XLSX | TRADING212_SYNC
+  type   String
+  // SyncStatus: PENDING | SUCCESS | PARTIAL | FAILED
+  status       String   @default("PENDING")
+  totalRows    Int      @default(0)
+  importedRows Int      @default(0)
+  skippedRows  Int      @default(0)
+  // JSON-encoded array of { row, reason } describing skipped/invalid rows.
+  errors       String?
+  fileName     String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model SyncLog {
+  id                 String            @id @default(cuid())
+  userId             String
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brokerConnectionId String?
+  brokerConnection   BrokerConnection? @relation(fields: [brokerConnectionId], references: [id], onDelete: SetNull)
+  // SyncStatus: PENDING | SUCCESS | PARTIAL | FAILED
+  status      String
+  message     String?
+  itemsSynced Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Daily total-value snapshots powering the performance chart (one row per day
+// per user, written on portfolio load).
+model PortfolioSnapshot {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  baseCurrency String
+  totalValue   Float
+  costBasis    Float    @default(0)
+  // Intraday time-series point (throttled on portfolio load) so short ranges
+  // like 1D show real movement / spikes after adds & price refreshes.
+  capturedAt   DateTime @default(now())
+
+  @@index([userId, capturedAt])
+}
