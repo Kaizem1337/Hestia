@@ -3,12 +3,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowUpRight, ArrowDownRight, RefreshCw, Plus, Wallet } from "lucide-react";
+import {
+  ArrowUpRight,
+  ArrowDownRight,
+  RefreshCw,
+  Plus,
+  Wallet,
+  TrendingUp,
+  TrendingDown,
+} from "lucide-react";
 import { useData, apiFetch } from "@/lib/client";
 import { Skeleton, EmptyState, ErrorState } from "@/components/ui/feedback";
 import { Donut } from "@/components/dashboard/donut";
 import { AreaChart } from "@/components/dashboard/area-chart";
 import { AddHoldingDialog } from "@/components/holdings/add-holding-dialog";
+import { StockLogo } from "@/components/holdings/stock-logo";
 import {
   cn,
   formatCurrency,
@@ -20,7 +29,6 @@ import type {
   PortfolioResult,
   EnrichedHolding,
   EnrichedWatchlist,
-  HoldingSource,
 } from "@/lib/view-types";
 
 const ALLOC_COLORS = [
@@ -33,12 +41,7 @@ const ALLOC_COLORS = [
   "#3f4670",
 ];
 const RANGES = ["1D", "1W", "1M", "1Y", "All"] as const;
-const SOURCE_LABELS: Record<HoldingSource, string> = {
-  MANUAL: "Manual",
-  TRADING212: "Trading 212",
-  IBKR: "IBKR",
-};
-type Scope = "ALL" | HoldingSource;
+type Scope = string; // "ALL" | "MANUAL" | accountKey
 
 const INTERVAL_MS: Record<string, number> = {
   M5: 5 * 60_000,
@@ -63,18 +66,12 @@ function tone(v: number | null | undefined) {
 function isCash(h: EnrichedHolding) {
   return h.symbol.toUpperCase() === "CASH" || h.yahooSymbol.toUpperCase() === "CASH";
 }
-/** First letter of the company name (falls back to the ticker). */
-function tileLetter(h: EnrichedHolding) {
-  const src = (h.name && h.name.trim()) || h.symbol;
-  const m = src.match(/[A-Za-z0-9]/);
-  return (m ? m[0] : "?").toUpperCase();
-}
-
 export default function DashboardPage() {
   const portfolio = useData<PortfolioResult>("/api/portfolio");
   const [range, setRange] = useState<(typeof RANGES)[number]>("1M");
+  const [scope, setScope] = useState<Scope>("ALL");
   const history = useData<{ points: { t: string; value: number }[] }>(
-    `/api/portfolio/history?range=${range}`
+    `/api/portfolio/history?range=${encodeURIComponent(range)}&scope=${encodeURIComponent(scope)}`
   );
   const watchlists = useData<{ watchlists: EnrichedWatchlist[] }>(
     "/api/watchlists"
@@ -84,8 +81,8 @@ export default function DashboardPage() {
   );
   const [adding, setAdding] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [scope, setScope] = useState<Scope>("ALL");
-  const [, setTick] = useState(0); // re-render so "updated X ago" stays current
+  const [, setTick] = useState(0);
+  const [watchMode, setWatchMode] = useState<"gainers" | "losers">("gainers"); // re-render so "updated X ago" stays current
 
   async function doRefresh(silent: boolean) {
     if (!silent) setRefreshing(true);
@@ -128,17 +125,19 @@ export default function DashboardPage() {
   const data = portfolio.data;
   const baseCurrency = data?.baseCurrency ?? "USD";
   const allHoldings = useMemo(() => data?.holdings ?? [], [data]);
-  const presentSources = useMemo(
-    () => Array.from(new Set(allHoldings.map((h) => h.source))) as HoldingSource[],
-    [allHoldings]
-  );
+  // Distinct accounts present (Manual + each IBKR number / Trading 212 API).
+  const accountOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const h of allHoldings) map.set(h.accountKey, h.accountLabel);
+    return Array.from(map, ([key, label]) => ({ key, label }));
+  }, [allHoldings]);
 
-  // Filter + recompute totals/allocation for the selected source scope.
+  // Filter + recompute totals/allocation for the selected account scope.
   const view = useMemo(() => {
     const list =
       scope === "ALL"
         ? allHoldings
-        : allHoldings.filter((h) => h.source === scope);
+        : allHoldings.filter((h) => h.accountKey === scope);
     const marketValue = list.reduce((s, h) => s + (h.baseMarketValue ?? 0), 0);
     const costBasis = list.reduce((s, h) => s + (h.baseCostBasis ?? 0), 0);
     const dayChange = list.reduce((s, h) => s + (h.baseDayChange ?? 0), 0);
@@ -166,6 +165,23 @@ export default function DashboardPage() {
     };
   }, [allHoldings, scope]);
 
+  // Top movers for the day, across all watchlist sections.
+  const watchItems = useMemo(
+    () => (watchlists.data?.watchlists ?? []).flatMap((w) => w.items),
+    [watchlists.data]
+  );
+  const movers = useMemo(() => {
+    const withChange = watchItems.filter(
+      (i) => i.changePercent !== null && i.changePercent !== undefined
+    );
+    withChange.sort((a, b) =>
+      watchMode === "gainers"
+        ? (b.changePercent ?? 0) - (a.changePercent ?? 0)
+        : (a.changePercent ?? 0) - (b.changePercent ?? 0)
+    );
+    return withChange.slice(0, 5);
+  }, [watchItems, watchMode]);
+
   const asOf = data?.pricesAsOf
     ? new Date(data.pricesAsOf).toLocaleDateString("en-US", {
         month: "long",
@@ -182,7 +198,11 @@ export default function DashboardPage() {
       </div>
     );
 
-  const scopes: Scope[] = ["ALL", ...presentSources];
+  const scopes: Scope[] = ["ALL", ...accountOptions.map((a) => a.key)];
+  const scopeLabel = (s: Scope) =>
+    s === "ALL"
+      ? "All accounts"
+      : accountOptions.find((a) => a.key === s)?.label ?? s;
 
   return (
     <div className="flex flex-col gap-6">
@@ -190,7 +210,7 @@ export default function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-3">
           <span className="eyebrow">
-            Total Balance{scope !== "ALL" ? ` · ${SOURCE_LABELS[scope]}` : ""}
+            Total Balance{scope !== "ALL" ? ` · ${scopeLabel(scope)}` : ""}
           </span>
           <span className="font-serif text-[clamp(40px,7vw,66px)] font-medium leading-[0.95] tracking-[-0.025em]">
             {formatCurrency(view.marketValue, baseCurrency)}
@@ -231,8 +251,8 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* Source scope filter */}
-      {presentSources.length > 1 && (
+      {/* Account scope filter */}
+      {accountOptions.length > 1 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {scopes.map((s) => (
             <button
@@ -245,7 +265,7 @@ export default function DashboardPage() {
                   : "border-border text-muted-foreground hover:text-foreground"
               )}
             >
-              {s === "ALL" ? "All accounts" : SOURCE_LABELS[s]}
+              {scopeLabel(s)}
             </button>
           ))}
         </div>
@@ -298,7 +318,10 @@ export default function DashboardPage() {
                   ))}
                 </div>
               </div>
-              <AreaChart data={(history.data?.points ?? []).map((p) => p.value)} />
+              <AreaChart
+                points={history.data?.points ?? []}
+                currency={baseCurrency}
+              />
             </div>
 
             {/* Holdings list */}
@@ -325,21 +348,24 @@ export default function DashboardPage() {
                   className="flex items-center gap-4 border-b border-border py-2.5"
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-3.5">
-                    <span
-                      className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl border border-border bg-white/[0.04] font-serif text-[15px]"
-                      style={{ color: h.color }}
-                    >
-                      {tileLetter(h)}
-                    </span>
+                    <StockLogo holding={h} size={38} monogramColor={h.color} />
                     <div className="flex min-w-0 flex-col">
                       <span className="truncate text-[15px] font-semibold">
                         {h.name || h.symbol}
                       </span>
-                      <span className="truncate text-[12.5px] tracking-wide text-faint">
-                        {h.symbol}
-                        {isCash(h)
-                          ? ""
-                          : ` · ${h.quantity.toLocaleString()} shares`}
+                      <span className="flex items-center gap-1.5 truncate text-[12.5px] tracking-wide text-faint">
+                        <span className="truncate">
+                          {h.symbol}
+                          {isCash(h)
+                            ? ""
+                            : ` · ${h.quantity.toLocaleString()} shares`}
+                        </span>
+                        {!isCash(h) && h.currentPrice !== null ? (
+                          <span className="shrink-0 rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[12px] font-semibold tabular text-foreground">
+                            {formatCurrency(h.currentPrice, h.nativeCurrency)}
+                            <span className="font-normal text-faint"> /sh</span>
+                          </span>
+                        ) : null}
                       </span>
                     </div>
                   </div>
@@ -401,10 +427,12 @@ export default function DashboardPage() {
                   data={view.list.map((h) => ({
                     color: h.color,
                     value: h.baseMarketValue ?? 0,
+                    label: h.name || h.symbol,
                   }))}
                   size={190}
                   thickness={26}
                   gap={3}
+                  currency={baseCurrency}
                 >
                   <span className="eyebrow" style={{ fontSize: 10 }}>
                     Equities
@@ -441,21 +469,48 @@ export default function DashboardPage() {
                   "linear-gradient(160deg, hsl(var(--violet) / 0.10), hsl(var(--teal) / 0.05))",
               }}
             >
-              <div className="flex items-center">
-                <span className="font-serif text-[19px]">Watchlist</span>
-                <div className="flex-1" />
-                <span className="text-[12.5px] text-faint">
-                  {watchlists.data?.watchlists?.[0]?.items.length ?? 0} tracked
+              <div className="flex items-center gap-2">
+                <span className="font-serif text-[19px]">
+                  {watchMode === "gainers" ? "Top Gainers" : "Top Losers"}
                 </span>
+                <div className="flex-1" />
+                <div className="flex items-center gap-0.5 rounded-full border border-border p-0.5">
+                  <button
+                    onClick={() => setWatchMode("gainers")}
+                    aria-label="Top gainers"
+                    title="Top gainers"
+                    className={`flex h-6 w-7 items-center justify-center rounded-full ${
+                      watchMode === "gainers"
+                        ? "bg-[hsl(var(--positive)/0.15)] text-[hsl(var(--positive))]"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <TrendingUp className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setWatchMode("losers")}
+                    aria-label="Top losers"
+                    title="Top losers"
+                    className={`flex h-6 w-7 items-center justify-center rounded-full ${
+                      watchMode === "losers"
+                        ? "bg-[hsl(var(--negative)/0.15)] text-[hsl(var(--negative))]"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <TrendingDown className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
               {watchlists.loading ? (
                 <Skeleton className="h-24" />
-              ) : (watchlists.data?.watchlists?.[0]?.items.length ?? 0) === 0 ? (
+              ) : movers.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Your watchlist is empty.
+                  {watchItems.length === 0
+                    ? "Your watchlist is empty."
+                    : "No price changes to rank yet."}
                 </p>
               ) : (
-                watchlists.data?.watchlists[0].items.slice(0, 4).map((item) => (
+                movers.map((item) => (
                   <div key={item.id} className="flex items-center gap-3">
                     <div className="flex min-w-0 flex-col">
                       <span className="truncate text-[14.5px] font-semibold">

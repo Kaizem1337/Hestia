@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertCircle } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/feedback";
 
 interface BasketItem {
@@ -35,12 +36,14 @@ export function BasketImportDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [fileName, setFileName] = useState("");
+  const [sectionName, setSectionName] = useState("");
   const [uploading, setUploading] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
   function reset() {
     setPreview(null);
     setFileName("");
+    setSectionName("");
   }
 
   async function onFile(file: File) {
@@ -59,6 +62,10 @@ export function BasketImportDialog({
       }
       setPreview(json.data.preview);
       setFileName(json.data.fileName);
+      setSectionName(
+        (json.data.fileName || "").replace(/\.[^.]+$/, "").trim() ||
+          "Imported basket"
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -73,7 +80,11 @@ export function BasketImportDialog({
       const res = await fetch("/api/import/basket/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: preview.items, fileName }),
+        body: JSON.stringify({
+          items: preview.items,
+          fileName,
+          name: sectionName.trim() || undefined,
+        }),
       });
       const json = await res.json();
       if (!res.ok || json.ok === false) {
@@ -147,6 +158,19 @@ export function BasketImportDialog({
             {preview.skippedRows > 0 && (
               <Badge tone="warning">{preview.skippedRows} skipped</Badge>
             )}
+          </div>
+
+          <div>
+            <Label htmlFor="section-name">New section name</Label>
+            <Input
+              id="section-name"
+              value={sectionName}
+              onChange={(e) => setSectionName(e.target.value)}
+              placeholder="e.g. AI Bottleneck Basket"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              These symbols are added to their own watchlist section.
+            </p>
           </div>
 
           <div className="max-h-64 overflow-y-auto rounded-lg border border-border">

@@ -148,6 +148,7 @@ describe("Trading212Connector", () => {
         exchange: undefined,
         isin: "US0378331005",
         name: "Apple Inc.",
+        purchaseDate: null,
         quantity: 3.5,
         source: "TRADING212",
         symbol: "AAPL",

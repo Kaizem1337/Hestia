@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "active": false,
+  "skill": "autopilot",
+  "keyword": "",
+  "phase": "ralplan",
+  "activated_at": "2026-06-20T15:31:34.949Z",
+  "updated_at": "2026-06-20T16:00:18.928Z",
+  "source": "state-operations",
+  "active_skills": []
+}

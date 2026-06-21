@@ -20,6 +20,7 @@ export interface EnrichedWatchlist {
   id: string;
   name: string;
   isDefault: boolean;
+  order: number;
   items: EnrichedWatchlistItem[];
 }
 
@@ -42,7 +43,7 @@ export async function getWatchlists(
   await ensureDefaultWatchlist(userId);
   const watchlists = await prisma.watchlist.findMany({
     where: { userId },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
     include: { items: { orderBy: { createdAt: "asc" } } },
   });
 
@@ -53,6 +54,7 @@ export async function getWatchlists(
     id: w.id,
     name: w.name,
     isDefault: w.isDefault,
+    order: w.order,
     items: w.items.map((i) => {
       const q = quotes.get(i.yahooSymbol);
       return {

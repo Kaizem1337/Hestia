@@ -13,6 +13,10 @@ export interface EnrichedHolding {
   isin: string | null;
   source: HoldingSource;
   accountName: string | null;
+  accountKey: string;
+  accountLabel: string;
+  purchaseDate: string | null;
+  logoUrl: string | null;
   quantity: number;
   avgCost: number;
   nativeCurrency: string;
@@ -73,6 +77,22 @@ function normalizePrice(
   return { price, currency };
 }
 
+/** Resolves a holding's account filter key + display label (nickname aware). */
+function resolveAccount(
+  source: string,
+  accountKey: string,
+  nick: string | null | undefined
+): { accountKey: string; accountLabel: string } {
+  if (source === "MANUAL") return { accountKey: "MANUAL", accountLabel: "Manual" };
+  const ak = accountKey || "";
+  const key = ak || source;
+  let label: string;
+  if (nick) label = nick;
+  else if (ak) label = source === "IBKR" ? `IBKR · ${ak}` : ak;
+  else label = source === "TRADING212" ? "Trading 212" : source;
+  return { accountKey: key, accountLabel: label };
+}
+
 export async function getPortfolio(
   userId: string,
   opts: { force?: boolean } = {}
@@ -95,6 +115,11 @@ export async function getPortfolio(
       hasMissingFx: false,
     };
   }
+
+  const accountRows = await prisma.account.findMany({ where: { userId } });
+  const nickMap = new Map(
+    accountRows.map((a) => [`${a.source}::${a.accountKey}`, a.nickname])
+  );
 
   const symbols = holdings.map((h) => h.yahooSymbol);
   const quotes = await getQuotesWithRefresh(symbols, { force: opts.force });
@@ -148,6 +173,12 @@ export async function getPortfolio(
       i;
     if (q?.asOf && (!pricesAsOf || q.asOf > pricesAsOf)) pricesAsOf = q.asOf;
 
+    const acc = resolveAccount(
+      h.source,
+      h.accountKey,
+      nickMap.get(`${h.source}::${h.accountKey || ""}`)
+    );
+
     const nativeCostBasis = h.quantity * h.avgCost;
     const nativeGainLoss =
       nativeMarketValue !== null ? nativeMarketValue - nativeCostBasis : null;
@@ -184,6 +215,10 @@ export async function getPortfolio(
       isin: h.isin,
       source: h.source as HoldingSource,
       accountName: h.accountName,
+      accountKey: acc.accountKey,
+      accountLabel: acc.accountLabel,
+      purchaseDate: h.purchaseDate ? h.purchaseDate.toISOString() : null,
+      logoUrl: h.logoUrl ?? null,
       quantity: h.quantity,
       avgCost: h.avgCost,
       nativeCurrency: priceCurrency,

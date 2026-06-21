@@ -1,0 +1,68 @@
+{
+  "mode": "autopilot",
+  "active": true,
+  "current_phase": "ultragoal",
+  "iteration": 1,
+  "review_cycle": 0,
+  "state": {
+    "phase_cycle": [
+      "deep-interview",
+      "ralplan",
+      "ultragoal",
+      "code-review",
+      "ultraqa"
+    ],
+    "handoff_artifacts": {
+      "context_snapshot_path": ".omx/context/fix-trading212-api-20260620T153038Z.md",
+      "deep_interview": {
+        "spec_path": ".omx/specs/deep-interview-fix-trading212-api.md",
+        "transcript_path": ".omx/interviews/fix-trading212-api-20260620T153038Z.md"
+      },
+      "ralplan": {
+        "prd_path": ".omx/plans/prd-fix-trading212-api.md",
+        "test_spec_path": ".omx/plans/test-spec-fix-trading212-api.md"
+      },
+      "ralplan_consensus_gate": {
+        "required": true,
+        "sequence": [
+          "architect-review",
+          "critic-review"
+        ],
+        "planning_artifacts_are_not_consensus": true,
+        "required_review_roles": [
+          "architect",
+          "critic"
+        ],
+        "ralplan_architect_review": {
+          "agent_role": "architect",
+          "provenance_kind": "native_subagent",
+          "session_id": "019ee5ac-79a9-77c3-b7db-b22a029e3bc7",
+          "thread_id": "019ee5ac-79a9-77c3-b7db-b22a029e3bc7",
+          "verdict": "approve",
+          "architectural_status": "CLEAR",
+          "evidence": "Architect re-review approved after credential contract and cash field were specified."
+        },
+        "ralplan_critic_review": {
+          "agent_role": "critic",
+          "provenance_kind": "native_subagent",
+          "session_id": "019ee5b0-99c8-7f00-8bbe-27be2e20cb91",
+          "thread_id": "019ee5b0-99c8-7f00-8bbe-27be2e20cb91",
+          "verdict": "approve",
+          "evidence": "Critic approved plan/test-spec before source edits."
+        },
+        "complete": true
+      },
+      "ultragoal": null,
+      "code_review": null,
+      "ultraqa": null
+    },
+    "deep_interview_gate": {
+      "status": "complete",
+      "rationale": "Repo inspection and current Trading 212 docs resolved the material ambiguity; remaining credential-shape choice was handled with backward-compatible behavior.",
+      "handoff_summary": "Fix current Trading 212 auth/endpoints, preserve legacy credentials, add focused tests."
+    },
+    "review_verdict": null,
+    "qa_verdict": null,
+    "return_to_ralplan_reason": null
+  }
+}

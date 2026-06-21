@@ -197,6 +197,7 @@ export class Trading212Connector implements BrokerConnector {
         quantity: p.quantity,
         avgCost: p.averagePricePaid ?? p.averagePrice ?? 0,
         accountName,
+        purchaseDate: p.initialFillDate ?? null,
         source: "TRADING212",
       });
     }
@@ -490,6 +491,8 @@ interface Trading212Position {
   instrument?: Trading212Instrument;
   quantity?: number;
   ticker?: string;
+  // ISO datetime the position was first opened (Trading 212 portfolio API).
+  initialFillDate?: string;
 }
 
 export function formatTrading212AuthorizationHeader(token: string): string {

@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Emit a self-contained server bundle (.next/standalone) for a lean Docker image.
+  output: "standalone",
   // yahoo-finance2 is a server-only dependency; keep it out of the client bundle.
   experimental: {
     serverComponentsExternalPackages: ["yahoo-finance2"],

@@ -76,6 +76,8 @@ export const holdingUpdateSchema = z.object({
   avgCost: z.coerce.number().min(0).optional(),
   name: z.string().trim().max(200).optional().nullable(),
   currency: z.string().trim().min(2).max(8).optional(),
+  // ISO date (YYYY-MM-DD) or full ISO string; empty/null clears the date.
+  purchaseDate: z.string().trim().optional().nullable(),
 });
 
 export const watchlistItemCreateSchema = z.object({
@@ -90,6 +92,21 @@ export const watchlistItemCreateSchema = z.object({
 
 export const watchlistCreateSchema = z.object({
   name: z.string().trim().min(1).max(80),
+});
+
+export const watchlistUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  direction: z.enum(["up", "down"]).optional(),
+});
+
+export const watchlistItemUpdateSchema = z.object({
+  notes: z.string().trim().max(500).nullable().optional(),
+  // Manual Yahoo symbol override (used when auto-detected prices are missing).
+  yahooSymbol: z.string().trim().min(1).max(40).optional(),
+});
+
+export const accountUpdateSchema = z.object({
+  nickname: z.string().trim().max(80).nullable().optional(),
 });
 
 const brokerCredentialSchema = z
@@ -135,6 +152,7 @@ export const importConfirmSchema = z.object({
         quantity: z.number(),
         avgCost: z.number(),
         accountName: z.string().optional().nullable(),
+        purchaseDate: z.string().optional().nullable(),
         source: z.enum(["MANUAL", "TRADING212", "IBKR"]),
       })
     )
@@ -159,6 +177,8 @@ export const basketConfirmSchema = z.object({
     )
     .min(1),
   watchlistId: z.string().optional(),
+  // When no watchlistId is given, imports land in a new section with this name.
+  name: z.string().trim().min(1).max(80).optional(),
   fileName: z.string().optional(),
 });
 

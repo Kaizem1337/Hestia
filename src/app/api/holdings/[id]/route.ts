@@ -27,6 +27,17 @@ export const PATCH = withErrorHandling(async (req: Request, ctx: Ctx) => {
   });
   if (!existing) return notFound("Holding");
 
+  // purchaseDate: undefined => unchanged; empty/null => cleared; else parsed.
+  let purchaseDate: Date | null | undefined;
+  if (parsed.data.purchaseDate === undefined) {
+    purchaseDate = undefined;
+  } else if (!parsed.data.purchaseDate) {
+    purchaseDate = null;
+  } else {
+    const d = new Date(parsed.data.purchaseDate);
+    purchaseDate = Number.isNaN(d.getTime()) ? null : d;
+  }
+
   const holding = await prisma.holding.update({
     where: { id: existing.id },
     data: {
@@ -34,6 +45,7 @@ export const PATCH = withErrorHandling(async (req: Request, ctx: Ctx) => {
       avgCost: parsed.data.avgCost ?? undefined,
       name: parsed.data.name === undefined ? undefined : parsed.data.name,
       currency: parsed.data.currency ?? undefined,
+      purchaseDate,
     },
   });
   return ok({ holding });

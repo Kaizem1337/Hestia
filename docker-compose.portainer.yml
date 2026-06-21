@@ -1,0 +1,59 @@
+# =============================================================================
+# Hestia — Portainer stack (Git / "attach to Git")
+#
+# This file does NOT build the image. GitHub Actions builds and pushes it to
+# GHCR; Portainer just pulls and runs it. In Portainer, click
+# "Pull and redeploy" / "Re-pull image and redeploy" to grab the newest :latest.
+#
+# Required stack environment variables (set these in the Portainer stack editor):
+#   NEXTAUTH_SECRET   - openssl rand -base64 32
+#   ENCRYPTION_KEY    - openssl rand -base64 32
+#   NEXTAUTH_URL      - public URL users hit, e.g. http://<host-ip>:9637
+# Optional:
+#   CRON_SECRET, LOGO_DEV_TOKEN
+# =============================================================================
+
+services:
+  hestia:
+    image: ghcr.io/kaizem1337/hestia:latest
+    container_name: hestia
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      # host:container  -> internal port stays 3000, published on host 9637
+      - "9637:3000"
+    environment:
+      NODE_ENV: production
+      # SQLite database file lives on the persistent volume below.
+      DATABASE_URL: "file:/app/data/app.db"
+      # REQUIRED — set the public URL (no trailing slash). Default is for quick testing only.
+      NEXTAUTH_URL: "${NEXTAUTH_URL:-http://localhost:9637}"
+      # REQUIRED secrets — set these in the Portainer stack env (do NOT commit real values).
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY}"
+      # Optional / tunable (sensible production defaults).
+      AVATAR_STORAGE_DRIVER: "local"
+      PRICE_MIN_REFRESH_SECONDS: "60"
+      TRADING212_LIVE_BASE_URL: "https://live.trading212.com"
+      TRADING212_DEMO_BASE_URL: "https://demo.trading212.com"
+      CRON_SECRET: "${CRON_SECRET:-}"
+      LOGO_DEV_TOKEN: "${LOGO_DEV_TOKEN:-}"
+    volumes:
+      - hestia-data:/app/data
+      - hestia-uploads:/app/public/uploads
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  hestia-data:
+  hestia-uploads:

@@ -50,10 +50,11 @@ async function main() {
   for (const s of samples) {
     await prisma.holding.upsert({
       where: {
-        userId_yahooSymbol_source: {
+        userId_source_accountKey_yahooSymbol: {
           userId: user.id,
-          yahooSymbol: s.yahooSymbol,
           source: "MANUAL",
+          accountKey: "",
+          yahooSymbol: s.yahooSymbol,
         },
       },
       update: {},

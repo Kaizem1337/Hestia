@@ -53,7 +53,10 @@ function Logo() {
           />
         )}
       </span>
-      <span className="font-serif text-[22px] font-medium tracking-tight">
+      <span
+        data-text="Hestia"
+        className="hestia-wordmark font-serif text-[22px] font-medium tracking-tight"
+      >
         Hestia
       </span>
     </Link>
@@ -183,13 +186,6 @@ export function AppShell({
         style={{
           background:
             "radial-gradient(ellipse, hsl(var(--violet) / 0.16), transparent 70%)",
-        }}
-      />
-      <div
-        className="pointer-events-none fixed right-[-140px] top-[60px] z-0 h-[420px] w-[520px]"
-        style={{
-          background:
-            "radial-gradient(ellipse, hsl(var(--teal) / 0.10), transparent 70%)",
         }}
       />
       {/* glowing figure, bottom-right, low opacity (from the design) */}

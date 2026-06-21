@@ -22,6 +22,7 @@ interface ImportHolding {
   quantity: number;
   avgCost: number;
   accountName?: string | null;
+  purchaseDate?: string | null;
   source: "IBKR";
 }
 interface Preview {

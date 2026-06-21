@@ -18,6 +18,8 @@ export interface NormalizedHolding {
   /** Average cost per share in native currency. */
   avgCost: number;
   accountName?: string | null;
+  /** ISO date the position was first opened, if known (drives chart start). */
+  purchaseDate?: string | null;
   source: HoldingSource;
 }
 

@@ -18,6 +18,9 @@ const serverSchema = z.object({
     .min(16, "ENCRYPTION_KEY is required for token encryption"),
   CRON_SECRET: z.string().min(1).optional(),
   AVATAR_STORAGE_DRIVER: z.enum(["local", "dataurl"]).default("local"),
+  // Optional logo.dev publishable token. When set, used as a fallback logo
+  // source after TradingView. Get a free token at https://www.logo.dev.
+  LOGO_DEV_TOKEN: z.string().min(1).optional(),
   PRICE_MIN_REFRESH_SECONDS: z.coerce.number().int().positive().default(60),
   TRADING212_LIVE_BASE_URL: z
     .string()

@@ -87,6 +87,26 @@ export function parseIbkrCsv(content: string): ImportResult {
     }
   }
 
+  // --- Trades (for purchase / open dates) -----------------------------------
+  // Header columns: DataDiscriminator,Asset Category,Currency,Symbol,Date/Time,
+  //                 Quantity,T. Price,... Open Positions carries no dates, so we
+  //                 derive each symbol's earliest BUY (positive quantity) as its
+  //                 purchase date. Date/Time looks like "YYYY-MM-DD, HH:MM:SS".
+  const purchaseDates = new Map<string, number>();
+  for (const r of records) {
+    if (r[0] !== "Trades" || r[1] !== "Data") continue;
+    const disc = r[2]?.trim();
+    if (disc !== "Trade" && disc !== "Order") continue;
+    const tSymbol = r[5]?.trim();
+    const dateStr = r[6]?.trim();
+    const qty = toNumber(r[7]);
+    if (!tSymbol || !dateStr || qty === null || qty <= 0) continue;
+    const ms = Date.parse(dateStr.replace(", ", "T"));
+    if (!Number.isFinite(ms)) continue;
+    const prev = purchaseDates.get(tSymbol);
+    if (prev === undefined || ms < prev) purchaseDates.set(tSymbol, ms);
+  }
+
   // --- Open Positions -------------------------------------------------------
   // Header columns: DataDiscriminator,Asset Category,Currency,Symbol,Quantity,
   //                 Mult,Cost Price,Cost Basis,Close Price,Value,...
@@ -130,6 +150,7 @@ export function parseIbkrCsv(content: string): ImportResult {
 
     const meta = instruments.get(symbol);
     const normalized = normalizeIbkrSymbol(symbol, meta?.listingExch);
+    const purchaseMs = purchaseDates.get(symbol);
 
     holdings.push({
       symbol,
@@ -141,6 +162,8 @@ export function parseIbkrCsv(content: string): ImportResult {
       quantity,
       avgCost: costPrice ?? 0,
       accountName,
+      purchaseDate:
+        purchaseMs !== undefined ? new Date(purchaseMs).toISOString() : null,
       source: "IBKR",
     });
   }

@@ -1,11 +1,17 @@
 import { Prisma } from "@prisma/client";
 import { getUserId } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
-import { ensureDefaultWatchlist } from "@/lib/watchlist/service";
 import { basketConfirmSchema } from "@/lib/validation";
 import { fail, ok, parseJson, unauthorized, withErrorHandling } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
+
+/** Derives a friendly section name from an uploaded file name. */
+function sectionNameFromFile(fileName?: string): string {
+  if (!fileName) return "Imported basket";
+  const base = fileName.split(/[\\/]/).pop() ?? fileName;
+  return base.replace(/\.[^.]+$/, "").trim() || "Imported basket";
+}
 
 export const POST = withErrorHandling(async (req: Request) => {
   const userId = await getUserId();
@@ -13,7 +19,7 @@ export const POST = withErrorHandling(async (req: Request) => {
 
   const parsed = await parseJson(req, basketConfirmSchema);
   if (!parsed.success) return parsed.response;
-  const { items, fileName } = parsed.data;
+  const { items, fileName, name } = parsed.data;
 
   let watchlistId = parsed.data.watchlistId;
   if (watchlistId) {
@@ -22,7 +28,16 @@ export const POST = withErrorHandling(async (req: Request) => {
     });
     if (!wl) return fail("Watchlist not found", 404);
   } else {
-    watchlistId = (await ensureDefaultWatchlist(userId)).id;
+    // Basket imports land in their own new section.
+    const sectionName = (name?.trim() || sectionNameFromFile(fileName)).slice(
+      0,
+      80
+    );
+    const order = await prisma.watchlist.count({ where: { userId } });
+    const wl = await prisma.watchlist.create({
+      data: { userId, name: sectionName, order },
+    });
+    watchlistId = wl.id;
   }
 
   let imported = 0;

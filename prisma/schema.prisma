@@ -40,8 +40,24 @@ model User {
   syncLogs          SyncLog[]
   passwordResets    PasswordResetToken[]
   snapshots         PortfolioSnapshot[]
+  accounts          Account[]
 
   @@index([email])
+}
+
+// A broker account a user holds positions in (one per IBKR account number /
+// Trading 212 API). Stores an optional nickname for display & filtering.
+model Account {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source     String // IBKR | TRADING212
+  accountKey String // IBKR account number / Trading 212 account id
+  nickname   String?
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, source, accountKey])
+  @@index([userId])
 }
 
 model UserSettings {
@@ -123,11 +139,19 @@ model Holding {
   brokerConnectionId String?
   brokerConnection   BrokerConnection? @relation(fields: [brokerConnectionId], references: [id], onDelete: SetNull)
   accountName        String?
+  // Account discriminator: IBKR account number, T212 account id, or "" (manual).
+  // Lets the same instrument be held separately across multiple accounts.
+  accountKey         String            @default("")
+  // Earliest purchase/open date for this position. Drives the performance
+  // chart's start point; null = unknown (counted for the whole range).
+  purchaseDate       DateTime?
+  // Manual logo override (uploaded .svg/.png URL). When null, the logo is
+  // auto-resolved (TradingView -> logo.dev) with a monogram fallback.
+  logoUrl            String?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
-  // Prevents accidental duplicates of the same instrument from the same source.
-  @@unique([userId, yahooSymbol, source])
+  @@unique([userId, source, accountKey, yahooSymbol])
   @@index([userId])
 }
 
@@ -141,6 +165,7 @@ model Watchlist {
   user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String          @default("My Watchlist")
   isDefault Boolean         @default(false)
+  order     Int             @default(0)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   items     WatchlistItem[]
@@ -194,6 +219,18 @@ model FxRate {
 
   @@unique([base, quote])
   @@index([base, quote])
+}
+
+// Cache of auto-resolved stock logos keyed by a normalized lookup key
+// (ISIN / Yahoo symbol / ticker). `url` null means "resolved to nothing"
+// (negative cache) so we don't re-query providers on every render.
+model LogoCache {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  url       String?
+  source    String? // "tradingview" | "logodev"
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
 }
 
 // ---------------------------------------------------------------------------

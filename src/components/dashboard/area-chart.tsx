@@ -1,20 +1,24 @@
 "use client";
 
 import * as React from "react";
+import { formatCurrency } from "@/lib/utils";
 
 const VW = 1000; // virtual width for the viewBox
 
-/** Catmull-Rom smoothed path (matches the design's chart smoothing). */
-function buildPath(data: number[], h: number, pad: number) {
-  const pts = data.map((v, i) => ({ v, i }));
-  const min = Math.min(...data);
-  const max = Math.max(...data);
+export interface ChartPoint {
+  t: string; // ISO timestamp
+  value: number;
+}
+
+function smoothPath(ys: number[], h: number, pad: number) {
+  const min = Math.min(...ys);
+  const max = Math.max(...ys);
   const range = max - min || 1;
   const iw = VW - pad * 2;
   const ih = h - pad * 2;
-  const P = pts.map((p) => ({
-    x: pad + (p.i / Math.max(data.length - 1, 1)) * iw,
-    y: pad + (1 - (p.v - min) / range) * ih,
+  const P = ys.map((v, i) => ({
+    x: pad + (i / Math.max(ys.length - 1, 1)) * iw,
+    y: pad + (1 - (v - min) / range) * ih,
   }));
   let d = `M ${P[0].x.toFixed(2)} ${P[0].y.toFixed(2)}`;
   for (let i = 0; i < P.length - 1; i++) {
@@ -28,49 +32,83 @@ function buildPath(data: number[], h: number, pad: number) {
     const c2y = p2.y - (p3.y - p1.y) / 6;
     d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
   }
-  const last = P[P.length - 1];
-  return { line: d, last, baseY: h - pad, firstX: P[0].x };
+  return { line: d, P, baseY: h - pad };
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  const day = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const time = d.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${day} · ${time}`;
 }
 
 /**
- * Responsive area line chart. Fills its container width; the stroke stays crisp
- * via vector-effect, and the end dot is positioned with CSS percentages.
+ * Responsive area line chart with a hover tooltip (date + value). Fills its
+ * container width; stroke stays crisp via vector-effect.
  */
 export function AreaChart({
-  data,
+  points,
   height = 210,
+  currency = "USD",
   color = "hsl(var(--violet))",
   fillOpacity = 0.22,
   strokeWidth = 2.5,
-  showDot = true,
 }: {
-  data: number[];
+  points: ChartPoint[];
   height?: number;
+  currency?: string;
   color?: string;
   fillOpacity?: number;
   strokeWidth?: number;
-  showDot?: boolean;
 }) {
   const gid = React.useId().replace(/:/g, "");
-  const series = data.length >= 2 ? data : data.length === 1 ? [data[0], data[0]] : [];
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [hover, setHover] = React.useState<{ idx: number; xPct: number } | null>(
+    null
+  );
+
+  const series = points.length >= 2 ? points : points.length === 1 ? [points[0], points[0]] : [];
+  const ys = series.map((p) => p.value);
+
   if (series.length === 0) {
     return (
       <div
         className="flex items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground"
         style={{ height }}
       >
-        Performance history will appear here as it’s tracked.
+        No price history available for this view yet.
       </div>
     );
   }
 
   const pad = 10;
-  const { line, last, baseY, firstX } = buildPath(series, height, pad);
-  const area = `${line} L ${last.x.toFixed(2)} ${baseY} L ${firstX.toFixed(2)} ${baseY} Z`;
-  const dotTopPct = (last.y / height) * 100;
+  const { line, P, baseY } = smoothPath(ys, height, pad);
+  const last = P[P.length - 1];
+  const area = `${line} L ${last.x.toFixed(2)} ${baseY} L ${P[0].x.toFixed(2)} ${baseY} Z`;
+
+  function onMove(e: React.MouseEvent) {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    const idx = Math.round(ratio * (series.length - 1));
+    setHover({ idx, xPct: (idx / (series.length - 1)) * 100 });
+  }
+
+  const hp = hover ? series[hover.idx] : null;
+  const hy = hover ? (P[hover.idx].y / height) * 100 : 0;
 
   return (
-    <div className="relative w-full" style={{ height }}>
+    <div
+      ref={ref}
+      className="relative w-full"
+      style={{ height }}
+      onMouseMove={onMove}
+      onMouseLeave={() => setHover(null)}
+    >
       <svg
         width="100%"
         height={height}
@@ -95,31 +133,48 @@ export function AreaChart({
           vectorEffect="non-scaling-stroke"
         />
       </svg>
-      {showDot && (
+
+      {/* end dot (only when not hovering) */}
+      {!hover && (
         <span
           className="absolute"
-          style={{
-            right: 0,
-            top: `${dotTopPct}%`,
-            transform: "translate(-2px, -50%)",
-          }}
+          style={{ right: 0, top: `${(last.y / height) * 100}%`, transform: "translate(-2px, -50%)" }}
         >
-          <span
-            className="block rounded-full"
-            style={{ width: 9, height: 9, background: color }}
+          <span className="block rounded-full" style={{ width: 9, height: 9, background: color }} />
+        </span>
+      )}
+
+      {/* hover guide + dot + tooltip */}
+      {hover && hp && (
+        <>
+          <div
+            className="pointer-events-none absolute top-0 bottom-0 w-px bg-border"
+            style={{ left: `${hover.xPct}%` }}
           />
           <span
-            className="absolute rounded-full"
+            className="pointer-events-none absolute rounded-full ring-2 ring-background"
             style={{
-              width: 18,
-              height: 18,
+              left: `${hover.xPct}%`,
+              top: `${hy}%`,
+              width: 10,
+              height: 10,
               background: color,
-              opacity: 0.18,
-              top: -4.5,
-              left: -4.5,
+              transform: "translate(-50%, -50%)",
             }}
           />
-        </span>
+          <div
+            className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-lg border border-border bg-card px-2.5 py-1.5 text-center shadow-lg"
+            style={{
+              left: `${Math.min(Math.max(hover.xPct, 10), 90)}%`,
+              top: 0,
+            }}
+          >
+            <div className="font-serif text-sm">
+              {formatCurrency(hp.value, currency)}
+            </div>
+            <div className="text-[10px] text-muted-foreground">{fmtDate(hp.t)}</div>
+          </div>
+        </>
       )}
     </div>
   );

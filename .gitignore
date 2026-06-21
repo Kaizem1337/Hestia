@@ -22,7 +22,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# env files
+# env files (never commit real secrets) — ignore every variant but the example
 .env
 .env.*
 !.env.example
@@ -38,17 +38,12 @@ yarn-error.log*
 # vitest
 /coverage
 
-# deployment
-.vercel/
-
-# TypeScript cache
-*.tsbuildinfo
-
-# logs
+# logs & archives
 *.log
+*.tar
+*.tar.gz
+*.tgz
+*.zip
 
-# tool/cache folders
-.omx/
-.turbo/
-.cache/
-.eslintcache
+# docker / runtime data
+/data

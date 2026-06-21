@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { IbkrImport } from "@/components/import/ibkr-import";
 import { BasketImportDialog } from "@/components/watchlist/basket-import-dialog";
+import { AccountsManager } from "@/components/accounts/accounts-manager";
 
 export default function ImportPage() {
   const router = useRouter();
@@ -59,6 +60,10 @@ export default function ImportPage() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="mt-6">
+        <AccountsManager />
       </div>
 
       <BasketImportDialog

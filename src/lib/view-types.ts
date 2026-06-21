@@ -14,6 +14,10 @@ export interface EnrichedHolding {
   isin: string | null;
   source: HoldingSource;
   accountName: string | null;
+  accountKey: string;
+  accountLabel: string;
+  purchaseDate: string | null;
+  logoUrl: string | null;
   quantity: number;
   avgCost: number;
   nativeCurrency: string;
@@ -75,6 +79,7 @@ export interface EnrichedWatchlist {
   id: string;
   name: string;
   isDefault: boolean;
+  order: number;
   items: EnrichedWatchlistItem[];
 }
 

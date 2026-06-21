@@ -19,8 +19,9 @@ export const POST = withErrorHandling(async (req: Request) => {
   if (!userId) return unauthorized();
   const parsed = await parseJson(req, watchlistCreateSchema);
   if (!parsed.success) return parsed.response;
+  const order = await prisma.watchlist.count({ where: { userId } });
   const watchlist = await prisma.watchlist.create({
-    data: { userId, name: parsed.data.name },
+    data: { userId, name: parsed.data.name, order },
   });
   return ok({ watchlist }, { status: 201 });
 });

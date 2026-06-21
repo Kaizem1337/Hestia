@@ -10,10 +10,14 @@ export interface SaveHoldingsResult {
 /**
  * Persists normalized holdings for a user.
  *
- * Duplicates are detected by the (userId, yahooSymbol, source) unique key:
- *   - merge=false (default): existing rows are left untouched and counted as
- *     skipped, so re-importing the same file never silently doubles positions.
- *   - merge=true: existing rows have quantity/avgCost/metadata updated.
+ * Duplicates are detected by the (userId, source, accountKey, yahooSymbol)
+ * unique key, so the same instrument can be held separately across multiple
+ * accounts (e.g. two IBKR accounts), and re-importing never doubles positions.
+ *   - merge=false (default): existing rows are left untouched (skipped).
+ *   - merge=true: existing rows are updated.
+ *
+ * `accountKey` comes from the holding's accountName (IBKR account number /
+ * Trading 212 account id; "" for manual entries).
  */
 export async function saveImportedHoldings(
   userId: string,
@@ -25,16 +29,20 @@ export async function saveImportedHoldings(
   let skipped = 0;
 
   for (const h of holdings) {
+    const accountKey = h.accountName ?? "";
+
     let existing = await prisma.holding.findUnique({
       where: {
-        userId_yahooSymbol_source: {
+        userId_source_accountKey_yahooSymbol: {
           userId,
-          yahooSymbol: h.yahooSymbol,
           source: h.source,
+          accountKey,
+          yahooSymbol: h.yahooSymbol,
         },
       },
     });
 
+    // Repair: a position whose Yahoo symbol changed but is the same instrument.
     if (!existing && opts.merge && opts.brokerConnectionId) {
       const repairMatchers = [
         { symbol: h.symbol },
@@ -64,6 +72,10 @@ export async function saveImportedHoldings(
             isin: h.isin ?? existing.isin,
             currency: h.currency,
             accountName: h.accountName ?? existing.accountName,
+            accountKey,
+            purchaseDate: h.purchaseDate
+              ? new Date(h.purchaseDate)
+              : existing.purchaseDate,
             brokerConnectionId:
               opts.brokerConnectionId ?? existing.brokerConnectionId,
           },
@@ -88,10 +100,34 @@ export async function saveImportedHoldings(
         avgCost: h.avgCost,
         source: h.source,
         accountName: h.accountName ?? null,
+        accountKey,
+        purchaseDate: h.purchaseDate ? new Date(h.purchaseDate) : null,
         brokerConnectionId: opts.brokerConnectionId ?? null,
       },
     });
     imported += 1;
+  }
+
+  // Register distinct accounts so they can be nicknamed and filtered.
+  // Best-effort: never let account bookkeeping break a holdings import.
+  try {
+    const seen = new Set<string>();
+    for (const h of holdings) {
+      const accountKey = h.accountName ?? "";
+      if (!accountKey || h.source === "MANUAL") continue;
+      const key = `${h.source}::${accountKey}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      await prisma.account.upsert({
+        where: {
+          userId_source_accountKey: { userId, source: h.source, accountKey },
+        },
+        create: { userId, source: h.source, accountKey },
+        update: {},
+      });
+    }
+  } catch {
+    /* account registration is non-critical */
   }
 
   return { imported, updated, skipped };
