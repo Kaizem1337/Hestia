@@ -4,15 +4,19 @@ import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/password";
 import { getEnv } from "@/lib/env";
 
-const isProduction = process.env.NODE_ENV === "production";
-
 /**
  * NextAuth (Auth.js) configuration.
  *
  * - Credentials provider with bcrypt password verification.
  * - JWT session strategy (required for credentials), signed with NEXTAUTH_SECRET.
- * - Secure, httpOnly, sameSite=lax session cookies in production.
  * - The user id is threaded into the JWT and session for per-user scoping.
+ *
+ * Cookie security is intentionally left to NextAuth's default, which derives
+ * `Secure` / `__Secure-` from the NEXTAUTH_URL scheme (https -> secure). This
+ * keeps the auth route and the middleware in agreement on the cookie name, and
+ * lets the app work over plain HTTP (e.g. http://<host-ip>:9637) where a forced
+ * Secure cookie would be rejected by the browser. Set NEXTAUTH_URL to the exact
+ * URL you serve the app on (http or https) for sign-in to work.
  */
 export const authOptions: NextAuthOptions = {
   secret: getEnv().NEXTAUTH_SECRET,
@@ -60,19 +64,6 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
       }
       return session;
-    },
-  },
-  cookies: {
-    sessionToken: {
-      name: isProduction
-        ? "__Secure-next-auth.session-token"
-        : "next-auth.session-token",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: isProduction,
-      },
     },
   },
 };
