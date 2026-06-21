@@ -181,3 +181,22 @@ export function normalizeAnySymbol(raw: string): NormalizedSymbol {
   }
   return { yahooSymbol: trimmed, currency: "USD", exchange: "US" };
 }
+
+/**
+ * Ordered list of Yahoo symbols to *try* when fetching market data.
+ *
+ * Yahoo lists Taiwan's main board (TWSE) as `.TW` and the Taipei Exchange
+ * (TPEx / OTC, formerly GreTai) as `.TWO`. Brokers rarely distinguish the two,
+ * so a TPEx instrument (e.g. 8299) commonly imports as `8299.TW` and returns no
+ * price data. We try the requested symbol first, then its Taiwan sibling, so a
+ * mis-suffixed holding still resolves without needing a re-import. Callers
+ * should key the result by the *original* symbol, not the one that resolved.
+ *
+ * Non-Taiwan symbols return just themselves (no extra requests).
+ */
+export function yahooSymbolCandidates(symbol: string): string[] {
+  const s = symbol.trim();
+  if (/\.TWO$/i.test(s)) return [s, s.replace(/\.TWO$/i, ".TW")];
+  if (/\.TW$/i.test(s)) return [s, s.replace(/\.TW$/i, ".TWO")];
+  return [s];
+}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { AuroraBackground } from "@/components/aurora-bg";
 import {
   ArrowRight,
   LineChart,
@@ -43,19 +44,14 @@ export default async function LandingPage() {
 
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-background text-foreground">
-      {/* ambient glows — mirrors the dashboard shell */}
+      {/* interactive aurora particle field (behind everything, non-blocking) */}
+      <AuroraBackground />
+      {/* ambient glow — mirrors the dashboard shell */}
       <div
         className="pointer-events-none fixed left-[14%] top-[-220px] z-0 h-[440px] w-[640px]"
         style={{
           background:
             "radial-gradient(ellipse, hsl(var(--violet) / 0.16), transparent 70%)",
-        }}
-      />
-      <div
-        className="pointer-events-none fixed right-[-160px] top-[40px] z-0 h-[440px] w-[540px]"
-        style={{
-          background:
-            "radial-gradient(ellipse, hsl(var(--teal) / 0.10), transparent 70%)",
         }}
       />
       {/* glowing figure, bottom-right, low opacity (from the design) */}

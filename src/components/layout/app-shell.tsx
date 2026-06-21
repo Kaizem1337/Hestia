@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn, initialsFromName } from "@/lib/utils";
 import { useTheme } from "@/components/theme-provider";
+import { AuroraBackground } from "@/components/aurora-bg";
 
 const NAV = [
   { href: "/dashboard", label: "Overview" },
@@ -156,7 +157,13 @@ function UserMenu({ user }: { user: UserInfo }) {
               <Settings className="h-4 w-4" /> Profile &amp; settings
             </Link>
             <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={async () => {
+                // redirect:false + same-origin navigation avoids NextAuth
+                // resolving the callback against NEXTAUTH_URL (which could send
+                // the user to localhost:3000 if it's misconfigured).
+                await signOut({ redirect: false });
+                window.location.assign("/login");
+              }}
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[hsl(var(--negative))] hover:bg-muted"
             >
               <LogOut className="h-4 w-4" /> Sign out
@@ -180,6 +187,8 @@ export function AppShell({
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-background text-foreground">
+      {/* interactive aurora particle field (behind everything, non-blocking) */}
+      <AuroraBackground />
       {/* ambient glows */}
       <div
         className="pointer-events-none fixed left-[16%] top-[-200px] z-0 h-[420px] w-[620px]"

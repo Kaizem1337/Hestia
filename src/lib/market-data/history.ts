@@ -1,4 +1,5 @@
 import { fetchJson } from "@/lib/http";
+import { yahooSymbolCandidates } from "@/lib/symbols";
 
 /**
  * Historical price series from Yahoo's crumb-free chart endpoint. Used to
@@ -31,36 +32,39 @@ export async function getPriceHistory(
   range: string
 ): Promise<PricePoint[]> {
   const p = RANGE_PARAMS[range] ?? RANGE_PARAMS["1M"];
-  for (const host of HOSTS) {
-    try {
-      const url = `${host}/v8/finance/chart/${encodeURIComponent(
-        symbol
-      )}?range=${p.range}&interval=${p.interval}`;
-      const json = await fetchJson<{
-        chart?: {
-          result?: Array<{
-            timestamp?: number[];
-            meta?: { currency?: string };
-            indicators?: { quote?: Array<{ close?: (number | null)[] }> };
-          }>;
-        };
-      }>(url);
-      const res = json?.chart?.result?.[0];
-      const ts = res?.timestamp;
-      const closes = res?.indicators?.quote?.[0]?.close;
-      const divisor = MINOR_UNIT[res?.meta?.currency ?? ""] ?? 1;
-      if (Array.isArray(ts) && Array.isArray(closes)) {
-        const out: PricePoint[] = [];
-        for (let i = 0; i < ts.length; i++) {
-          const c = closes[i];
-          if (typeof c === "number" && Number.isFinite(c)) {
-            out.push({ t: ts[i] * 1000, close: c / divisor });
+  // Try the requested symbol first, then its Taiwan sibling (.TW <-> .TWO).
+  for (const sym of yahooSymbolCandidates(symbol)) {
+    for (const host of HOSTS) {
+      try {
+        const url = `${host}/v8/finance/chart/${encodeURIComponent(
+          sym
+        )}?range=${p.range}&interval=${p.interval}`;
+        const json = await fetchJson<{
+          chart?: {
+            result?: Array<{
+              timestamp?: number[];
+              meta?: { currency?: string };
+              indicators?: { quote?: Array<{ close?: (number | null)[] }> };
+            }>;
+          };
+        }>(url);
+        const res = json?.chart?.result?.[0];
+        const ts = res?.timestamp;
+        const closes = res?.indicators?.quote?.[0]?.close;
+        const divisor = MINOR_UNIT[res?.meta?.currency ?? ""] ?? 1;
+        if (Array.isArray(ts) && Array.isArray(closes)) {
+          const out: PricePoint[] = [];
+          for (let i = 0; i < ts.length; i++) {
+            const c = closes[i];
+            if (typeof c === "number" && Number.isFinite(c)) {
+              out.push({ t: ts[i] * 1000, close: c / divisor });
+            }
           }
+          if (out.length) return out;
         }
-        if (out.length) return out;
+      } catch {
+        // try next host / candidate
       }
-    } catch {
-      // try next host
     }
   }
   return [];

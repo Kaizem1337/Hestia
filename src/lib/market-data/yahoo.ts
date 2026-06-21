@@ -1,4 +1,5 @@
 import { fetchJson } from "@/lib/http";
+import { yahooSymbolCandidates } from "@/lib/symbols";
 import type { MarketDataProvider, Quote, SymbolSearchResult } from "./types";
 
 /**
@@ -54,35 +55,41 @@ export class YahooMarketDataProvider implements MarketDataProvider {
   }
 
   private async getOneQuote(symbol: string): Promise<Quote | null> {
-    for (const host of CHART_HOSTS) {
-      try {
-        const url = `${host}/v8/finance/chart/${encodeURIComponent(
-          symbol
-        )}?range=1d&interval=1d`;
-        const json = await fetchJson<{
-          chart?: { result?: Array<{ meta?: ChartMeta }>; error?: unknown };
-        }>(url);
-        const meta = json?.chart?.result?.[0]?.meta;
-        if (!meta || typeof meta.regularMarketPrice !== "number") continue;
-        const price = meta.regularMarketPrice;
-        const prev = meta.chartPreviousClose ?? meta.previousClose;
-        const change = typeof prev === "number" ? price - prev : undefined;
-        const changePercent =
-          typeof prev === "number" && prev !== 0
-            ? ((price - prev) / prev) * 100
-            : undefined;
-        return {
-          yahooSymbol: meta.symbol ?? symbol,
-          currency: meta.currency,
-          price,
-          previousClose: typeof prev === "number" ? prev : undefined,
-          change,
-          changePercent,
-          shortName: meta.shortName ?? meta.longName,
-          exchange: meta.fullExchangeName ?? meta.exchangeName,
-        };
-      } catch {
-        // try next host
+    // Try the requested symbol first, then its Taiwan sibling (.TW <-> .TWO),
+    // since brokers often mis-suffix Taipei Exchange tickers as .TW.
+    for (const candidate of yahooSymbolCandidates(symbol)) {
+      for (const host of CHART_HOSTS) {
+        try {
+          const url = `${host}/v8/finance/chart/${encodeURIComponent(
+            candidate
+          )}?range=1d&interval=1d`;
+          const json = await fetchJson<{
+            chart?: { result?: Array<{ meta?: ChartMeta }>; error?: unknown };
+          }>(url);
+          const meta = json?.chart?.result?.[0]?.meta;
+          if (!meta || typeof meta.regularMarketPrice !== "number") continue;
+          const price = meta.regularMarketPrice;
+          const prev = meta.chartPreviousClose ?? meta.previousClose;
+          const change = typeof prev === "number" ? price - prev : undefined;
+          const changePercent =
+            typeof prev === "number" && prev !== 0
+              ? ((price - prev) / prev) * 100
+              : undefined;
+          return {
+            // Key by the ORIGINAL requested symbol so it maps to the stored
+            // holding even when data resolved via the sibling suffix.
+            yahooSymbol: symbol,
+            currency: meta.currency,
+            price,
+            previousClose: typeof prev === "number" ? prev : undefined,
+            change,
+            changePercent,
+            shortName: meta.shortName ?? meta.longName,
+            exchange: meta.fullExchangeName ?? meta.exchangeName,
+          };
+        } catch {
+          // try next host / candidate
+        }
       }
     }
     return null;
