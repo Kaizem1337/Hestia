@@ -31,8 +31,7 @@ export class YahooFxProvider implements FxProvider {
     return out;
   }
 
-  private async getOne(pair: FxPair): Promise<FxQuote | null> {
-    const symbol = `${pair.from}${pair.to}=X`;
+  private async fetchPrice(symbol: string): Promise<number | null> {
     for (const host of HOSTS) {
       try {
         const url = `${host}/v8/finance/chart/${encodeURIComponent(
@@ -43,12 +42,28 @@ export class YahooFxProvider implements FxProvider {
         }>(url);
         const rate = json?.chart?.result?.[0]?.meta?.regularMarketPrice;
         if (typeof rate === "number" && Number.isFinite(rate) && rate > 0) {
-          return { from: pair.from, to: pair.to, rate };
+          return rate;
         }
       } catch {
         // try next host
       }
     }
+    return null;
+  }
+
+  private async getOne(pair: FxPair): Promise<FxQuote | null> {
+    const direct = await this.fetchPrice(`${pair.from}${pair.to}=X`);
+    // Yahoo quotes tiny rates with very low precision — e.g. KRWUSD=X comes
+    // back as 0.0007 (one significant figure, ~7% off). When the direct rate is
+    // small, the inverse pair (USDKRW=X ≈ 1530) is quoted at full precision, so
+    // fetch and invert that instead.
+    if (direct === null || direct < 0.1) {
+      const inverse = await this.fetchPrice(`${pair.to}${pair.from}=X`);
+      if (inverse !== null && inverse > 0) {
+        return { from: pair.from, to: pair.to, rate: 1 / inverse };
+      }
+    }
+    if (direct !== null) return { from: pair.from, to: pair.to, rate: direct };
     return null;
   }
 }

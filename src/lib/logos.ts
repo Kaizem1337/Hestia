@@ -35,6 +35,17 @@ function baseTicker(symbol: string): string {
   return (symbol.split(".")[0] || symbol).trim();
 }
 
+/**
+ * Clean ticker for provider lookups. The display `symbol` can be a Bloomberg
+ * string like "009150 KS Equity" / "MRVL US Equity"; the Yahoo symbol is always
+ * clean ("009150.KS" / "MRVL"), so prefer its base. Using the Bloomberg form
+ * made searches match on the country code (KS->Kookmin Bank, US->Schwab, …).
+ */
+function tickerFor(lookup: LogoLookup): string {
+  const ys = (lookup.yahooSymbol ?? "").trim();
+  return baseTicker(ys || lookup.symbol);
+}
+
 interface TvResult {
   symbol?: string;
   logoid?: string;
@@ -82,23 +93,29 @@ async function tvFetch(query: string): Promise<TvResult[]> {
 }
 
 async function resolveTradingView(lookup: LogoLookup): Promise<string | null> {
-  const base = baseTicker(lookup.symbol);
-  const queries = [base, lookup.name?.trim()].filter(
-    (q): q is string => Boolean(q && q.length > 0)
-  );
-  for (const q of queries) {
+  const base = tickerFor(lookup);
+  // 1) Ticker search — only trust an EXACT symbol match. (Never grab the first
+  //    arbitrary result: that is what mapped KS->Kookmin, US->Schwab, TT->TTM.)
+  if (base) {
     try {
-      const results = (await tvFetch(q)).filter(
-        (r) => r.logoid && r.logoid.trim()
-      );
-      if (results.length === 0) continue;
+      const results = (await tvFetch(base)).filter((r) => r.logoid?.trim());
       const exact = results.find(
         (r) => (r.symbol ?? "").toUpperCase() === base.toUpperCase()
       );
-      const hit = exact ?? results[0];
-      if (hit.logoid) return tvLogo(hit.logoid);
+      if (exact?.logoid) return tvLogo(exact.logoid);
     } catch {
-      // try the next query / fall through to logo.dev
+      // fall through to the name search
+    }
+  }
+  // 2) Company-name search — relevance-ranked, so the top logo'd hit is the
+  //    company itself. Handles foreign tickers TradingView indexes by name.
+  const name = lookup.name?.trim();
+  if (name) {
+    try {
+      const results = (await tvFetch(name)).filter((r) => r.logoid?.trim());
+      if (results[0]?.logoid) return tvLogo(results[0].logoid);
+    } catch {
+      /* give up -> logo.dev / monogram */
     }
   }
   return null;
@@ -112,8 +129,10 @@ function logoDevToken(): string | undefined {
 function resolveLogoDev(lookup: LogoLookup): string | null {
   const token = logoDevToken();
   if (!token) return null;
-  const ticker = baseTicker(lookup.symbol);
-  if (!ticker) return null;
+  const ticker = tickerFor(lookup);
+  // logo.dev's ticker API only knows US-style alphabetic tickers. Skip numeric
+  // / foreign tickers (e.g. "009150", "8299") which would return a wrong logo.
+  if (!ticker || !/^[A-Za-z][A-Za-z.\-]*$/.test(ticker)) return null;
   // `retina` for crispness; `fallback=404` so a real miss surfaces as an error
   // (img onError -> monogram) instead of logo.dev's generic placeholder.
   return `https://img.logo.dev/ticker/${encodeURIComponent(

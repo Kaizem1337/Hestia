@@ -70,8 +70,18 @@ export default function DashboardPage() {
   const portfolio = useData<PortfolioResult>("/api/portfolio");
   const [range, setRange] = useState<(typeof RANGES)[number]>("1M");
   const [scope, setScope] = useState<Scope>("ALL");
+  // When a single account is selected, draw its chart in that account's currency.
+  const scopeCurrency =
+    scope === "ALL"
+      ? undefined
+      : portfolio.data?.holdings.find((h) => h.accountKey === scope)
+          ?.accountCurrency;
   const history = useData<{ points: { t: string; value: number }[] }>(
-    `/api/portfolio/history?range=${encodeURIComponent(range)}&scope=${encodeURIComponent(scope)}`
+    `/api/portfolio/history?range=${encodeURIComponent(
+      range
+    )}&scope=${encodeURIComponent(scope)}${
+      scopeCurrency ? `&currency=${encodeURIComponent(scopeCurrency)}` : ""
+    }`
   );
   const watchlists = useData<{ watchlists: EnrichedWatchlist[] }>(
     "/api/watchlists"
@@ -133,28 +143,41 @@ export default function DashboardPage() {
   }, [allHoldings]);
 
   // Filter + recompute totals/allocation for the selected account scope.
+  // For a single account we show its own currency; "All" uses the base currency.
   const view = useMemo(() => {
     const list =
       scope === "ALL"
         ? allHoldings
         : allHoldings.filter((h) => h.accountKey === scope);
-    const marketValue = list.reduce((s, h) => s + (h.baseMarketValue ?? 0), 0);
-    const costBasis = list.reduce((s, h) => s + (h.baseCostBasis ?? 0), 0);
-    const dayChange = list.reduce((s, h) => s + (h.baseDayChange ?? 0), 0);
+    const useAcct = scope !== "ALL";
+    const mv = (h: EnrichedHolding) =>
+      (useAcct ? h.accountMarketValue : h.baseMarketValue) ?? 0;
+    const cb = (h: EnrichedHolding) =>
+      (useAcct ? h.accountCostBasis : h.baseCostBasis) ?? 0;
+    const dc = (h: EnrichedHolding) =>
+      (useAcct ? h.accountDayChange : h.baseDayChange) ?? 0;
+    const currency = useAcct
+      ? list[0]?.accountCurrency ?? baseCurrency
+      : baseCurrency;
+    const marketValue = list.reduce((s, h) => s + mv(h), 0);
+    const costBasis = list.reduce((s, h) => s + cb(h), 0);
+    const dayChange = list.reduce((s, h) => s + dc(h), 0);
     const gainLoss = marketValue - costBasis;
     const prev = marketValue - dayChange;
     const ranked = [...list]
-      .sort((a, b) => (b.baseMarketValue ?? 0) - (a.baseMarketValue ?? 0))
+      .sort((a, b) => mv(b) - mv(a))
       .map((h, i) => ({
         ...h,
         color: ALLOC_COLORS[i % ALLOC_COLORS.length],
-        allocPct: marketValue > 0 ? ((h.baseMarketValue ?? 0) / marketValue) * 100 : 0,
+        allocPct: marketValue > 0 ? (mv(h) / marketValue) * 100 : 0,
+        displayValue: useAcct ? h.accountMarketValue : h.baseMarketValue,
       }));
     const equitiesPct = ranked
       .filter((h) => !isCash(h))
       .reduce((s, h) => s + h.allocPct, 0);
     return {
       list: ranked,
+      currency,
       marketValue,
       costBasis,
       dayChange,
@@ -163,7 +186,7 @@ export default function DashboardPage() {
       glPct: costBasis > 0 ? (gainLoss / costBasis) * 100 : 0,
       equitiesPct,
     };
-  }, [allHoldings, scope]);
+  }, [allHoldings, scope, baseCurrency]);
 
   // Top movers for the day, across all watchlist sections.
   const watchItems = useMemo(
@@ -213,7 +236,7 @@ export default function DashboardPage() {
             Total Balance{scope !== "ALL" ? ` · ${scopeLabel(scope)}` : ""}
           </span>
           <span className="font-serif text-[clamp(40px,7vw,66px)] font-medium leading-[0.95] tracking-[-0.025em]">
-            {formatCurrency(view.marketValue, baseCurrency)}
+            {formatCurrency(view.marketValue, view.currency)}
           </span>
           <div className="flex items-center gap-3.5">
             <span className={`inline-flex items-center gap-1.5 text-[15px] ${tone(view.dayChange)}`}>
@@ -222,7 +245,7 @@ export default function DashboardPage() {
               ) : (
                 <ArrowDownRight className="h-4 w-4" />
               )}
-              {formatSignedCurrency(view.dayChange, baseCurrency)} ·{" "}
+              {formatSignedCurrency(view.dayChange, view.currency)} ·{" "}
               {formatPercent(view.dayPct, { signed: true })} today
             </span>
             <span className="h-4 w-px bg-border" />
@@ -318,9 +341,10 @@ export default function DashboardPage() {
                   ))}
                 </div>
               </div>
+              {/* chart currency follows the selected account */}
               <AreaChart
                 points={history.data?.points ?? []}
-                currency={baseCurrency}
+                currency={view.currency}
               />
             </div>
 
@@ -386,11 +410,11 @@ export default function DashboardPage() {
                   {/* value + native */}
                   <div className="w-32 text-right">
                     <div className="font-serif text-[18px]">
-                      {formatCurrency(h.baseMarketValue, baseCurrency, {
+                      {formatCurrency(h.displayValue, view.currency, {
                         maximumFractionDigits: 0,
                       })}
                     </div>
-                    {h.nativeCurrency !== baseCurrency &&
+                    {h.nativeCurrency !== view.currency &&
                       h.nativeMarketValue !== null && (
                         <div className="tabular text-[11px] text-faint">
                           {formatCurrency(h.nativeMarketValue, h.nativeCurrency, {
@@ -426,13 +450,13 @@ export default function DashboardPage() {
                 <Donut
                   data={view.list.map((h) => ({
                     color: h.color,
-                    value: h.baseMarketValue ?? 0,
+                    value: h.displayValue ?? 0,
                     label: h.name || h.symbol,
                   }))}
                   size={190}
                   thickness={26}
                   gap={3}
-                  currency={baseCurrency}
+                  currency={view.currency}
                 >
                   <span className="eyebrow" style={{ fontSize: 10 }}>
                     Equities

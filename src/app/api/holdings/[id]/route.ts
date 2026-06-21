@@ -45,6 +45,7 @@ export const PATCH = withErrorHandling(async (req: Request, ctx: Ctx) => {
       avgCost: parsed.data.avgCost ?? undefined,
       name: parsed.data.name === undefined ? undefined : parsed.data.name,
       currency: parsed.data.currency ?? undefined,
+      yahooSymbol: parsed.data.yahooSymbol ?? undefined,
       purchaseDate,
     },
   });

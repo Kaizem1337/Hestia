@@ -22,8 +22,11 @@ export async function GET(req: Request) {
     const isin = url.searchParams.get("isin")?.trim() ?? "";
     const name = url.searchParams.get("name")?.trim() ?? "";
 
-    const key = (isin || yahooSymbol || symbol).toUpperCase();
-    if (!key) return new Response(null, { status: 404 });
+    const raw = (isin || yahooSymbol || symbol).toUpperCase();
+    if (!raw) return new Response(null, { status: 404 });
+    // Versioned cache key: bumping the prefix invalidates logos resolved by the
+    // old (buggy) matcher so they all re-resolve correctly.
+    const key = `v2:${raw}`;
 
     // Only trust a *positive* cache hit. Null/expired rows fall through to a
     // fresh resolve, so misses never get stuck (auto-heals poisoned caches).

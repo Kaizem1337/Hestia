@@ -35,6 +35,12 @@ export interface EnrichedHolding {
   baseGainLoss: number | null;
   baseGainLossPercent: number | null;
   baseDayChange: number | null;
+  accountCurrency: string;
+  accountMarketValue: number | null;
+  accountCostBasis: number;
+  accountGainLoss: number | null;
+  accountGainLossPercent: number | null;
+  accountDayChange: number | null;
   allocationPercent: number | null;
   priceAsOf: string | null;
   stale: boolean;
@@ -68,6 +74,7 @@ export interface EnrichedWatchlistItem {
   exchange: string | null;
   currency: string | null;
   notes: string | null;
+  weight: number | null;
   price: number | null;
   change: number | null;
   changePercent: number | null;

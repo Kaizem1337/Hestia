@@ -9,6 +9,7 @@ export interface EnrichedWatchlistItem {
   exchange: string | null;
   currency: string | null;
   notes: string | null;
+  weight: number | null;
   price: number | null;
   change: number | null;
   changePercent: number | null;
@@ -65,6 +66,7 @@ export async function getWatchlists(
         exchange: i.exchange ?? q?.exchange ?? null,
         currency: i.currency ?? q?.currency ?? null,
         notes: i.notes,
+        weight: i.weight ?? null,
         price: q?.price ?? null,
         change: q?.change ?? null,
         changePercent: q?.changePercent ?? null,

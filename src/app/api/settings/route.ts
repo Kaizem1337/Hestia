@@ -32,6 +32,10 @@ export const PATCH = withErrorHandling(async (req: Request) => {
       baseCurrency: parsed.data.baseCurrency ?? undefined,
       priceInterval: parsed.data.priceInterval ?? undefined,
       theme: parsed.data.theme ?? undefined,
+      accountCurrencies:
+        parsed.data.accountCurrencies !== undefined
+          ? JSON.stringify(parsed.data.accountCurrencies)
+          : undefined,
     },
   });
   return ok({ settings });

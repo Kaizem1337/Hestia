@@ -20,6 +20,7 @@ export function EditHoldingDialog({
 }) {
   const [quantity, setQuantity] = useState("");
   const [avgCost, setAvgCost] = useState("");
+  const [yahooSymbol, setYahooSymbol] = useState("");
   const [purchaseDate, setPurchaseDate] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoBusy, setLogoBusy] = useState(false);
@@ -34,6 +35,7 @@ export function EditHoldingDialog({
     if (holding) {
       setQuantity(String(holding.quantity));
       setAvgCost(String(holding.avgCost));
+      setYahooSymbol(holding.yahooSymbol);
       setPurchaseDate(holding.purchaseDate ? holding.purchaseDate.slice(0, 10) : "");
       setLogoUrl(holding.logoUrl ?? null);
     }
@@ -90,6 +92,7 @@ export function EditHoldingDialog({
         body: JSON.stringify({
           quantity: Number(quantity),
           avgCost: Number(avgCost),
+          yahooSymbol: yahooSymbol.trim() || undefined,
           purchaseDate: purchaseDate || null,
         }),
       });
@@ -193,6 +196,20 @@ export function EditHoldingDialog({
           <p className="mt-1 text-xs text-muted-foreground">
             The performance chart starts from this date; earlier dates show a
             flat line at zero. Leave blank to count across the whole range.
+          </p>
+        </div>
+        <div>
+          <Label htmlFor="eysym">Yahoo symbol</Label>
+          <Input
+            id="eysym"
+            value={yahooSymbol}
+            onChange={(e) => setYahooSymbol(e.target.value)}
+            placeholder="e.g. 8299.TWO"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Symbol used to fetch prices. Override it if prices are missing — e.g.
+            a Taipei Exchange ticker that should end in <code>.TWO</code>, not{" "}
+            <code>.TW</code>.
           </p>
         </div>
         <div className="flex justify-end gap-2 pt-2">

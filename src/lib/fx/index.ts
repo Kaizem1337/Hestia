@@ -1,30 +1,39 @@
 import { prisma } from "@/lib/prisma";
 import { YahooFxProvider } from "./yahoo-fx";
+import { FrankfurterFxProvider } from "./frankfurter-fx";
 import { StooqFxProvider } from "./stooq-fx";
 import type { FxPair, FxProvider, FxQuote } from "./types";
 
 export type { FxPair, FxQuote } from "./types";
 export { convert } from "./convert";
 
-/** Yahoo FX primary, Stooq fallback for any pair Yahoo could not resolve. */
+/**
+ * FX provider chain: Yahoo (intraday, all currencies) -> Frankfurter (ECB,
+ * reliable for majors, no key) -> Stooq. Each provider only handles the pairs
+ * still unresolved by the previous one.
+ */
 class CompositeFxProvider implements FxProvider {
   readonly name = "composite-fx";
-  private yahoo = new YahooFxProvider();
-  private stooq = new StooqFxProvider();
+  private chain: FxProvider[] = [
+    new YahooFxProvider(),
+    new FrankfurterFxProvider(),
+    new StooqFxProvider(),
+  ];
 
   async getRates(pairs: FxPair[]): Promise<FxQuote[]> {
-    const yq = await this.yahoo.getRates(pairs);
-    const have = new Set(yq.map((q) => `${q.from}${q.to}`));
-    const missing = pairs.filter((p) => !have.has(`${p.from}${p.to}`));
-    let sq: FxQuote[] = [];
-    if (missing.length > 0) {
+    const out: FxQuote[] = [];
+    let remaining = pairs;
+    for (const provider of this.chain) {
+      if (remaining.length === 0) break;
       try {
-        sq = await this.stooq.getRates(missing);
+        out.push(...(await provider.getRates(remaining)));
+        const have = new Set(out.map((q) => `${q.from}${q.to}`));
+        remaining = pairs.filter((p) => !have.has(`${p.from}${p.to}`));
       } catch {
-        /* non-fatal */
+        /* try the next provider */
       }
     }
-    return [...yq, ...sq];
+    return out;
   }
 }
 
@@ -34,8 +43,9 @@ export function getFxProvider(): FxProvider {
   return provider;
 }
 
-// FX rates are cached for this long before a re-fetch is attempted.
-const FX_TTL_SECONDS = 60 * 30; // 30 minutes
+// FX rates are cached for this long before a re-fetch is attempted (a manual
+// refresh bypasses this via `force`).
+const FX_TTL_SECONDS = 60 * 10; // 10 minutes
 
 export interface FxConversion {
   rate: number;
@@ -49,14 +59,20 @@ export interface FxConversion {
  * otherwise refreshing from the provider. Falls back gracefully to a stale
  * cached rate, then to 1.0 (flagged `missing`) if nothing is available.
  */
-export async function getRate(from: string, to: string): Promise<FxConversion> {
+export async function getRate(
+  from: string,
+  to: string,
+  opts: { force?: boolean } = {}
+): Promise<FxConversion> {
   if (from === to) return { rate: 1, asOf: new Date(), missing: false };
 
   const cached = await prisma.fxRate.findUnique({
     where: { base_quote: { base: from, quote: to } },
   });
   const fresh =
-    cached && (Date.now() - cached.asOf.getTime()) / 1000 < FX_TTL_SECONDS;
+    !opts.force &&
+    cached &&
+    (Date.now() - cached.asOf.getTime()) / 1000 < FX_TTL_SECONDS;
   if (cached && fresh) {
     return { rate: cached.rate, asOf: cached.asOf, missing: false };
   }
@@ -82,7 +98,8 @@ export async function getRate(from: string, to: string): Promise<FxConversion> {
  */
 export async function getRatesToBase(
   currencies: string[],
-  base: string
+  base: string,
+  opts: { force?: boolean } = {}
 ): Promise<Map<string, FxConversion>> {
   const distinct = Array.from(new Set(currencies.filter(Boolean)));
   const map = new Map<string, FxConversion>();
@@ -101,7 +118,9 @@ export async function getRatesToBase(
   for (const cur of toFetch) {
     const cached = cachedMap.get(cur);
     const fresh =
-      cached && (Date.now() - cached.asOf.getTime()) / 1000 < FX_TTL_SECONDS;
+      !opts.force &&
+      cached &&
+      (Date.now() - cached.asOf.getTime()) / 1000 < FX_TTL_SECONDS;
     if (cached && fresh) {
       map.set(cur, { rate: cached.rate, asOf: cached.asOf, missing: false });
     } else {

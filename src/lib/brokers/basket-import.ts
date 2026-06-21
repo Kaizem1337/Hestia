@@ -22,6 +22,8 @@ export interface BasketItem {
   exchange?: string;
   currency?: string;
   notes?: string;
+  /** Basket allocation weight (%), if the file carries one. */
+  weight?: number | null;
 }
 
 export interface BasketImportResult {
@@ -38,6 +40,8 @@ type ColMap = {
   exchange: number;
   currency: number;
   notes: number;
+  weight: number;
+  weightFallback: number;
 };
 
 function matchHeader(cell: unknown): keyof ColMap | null {
@@ -48,7 +52,21 @@ function matchHeader(cell: unknown): keyof ColMap | null {
   if (/exchange|exch/.test(c)) return "exchange";
   if (/currency|ccy/.test(c)) return "currency";
   if (/note/.test(c)) return "notes";
+  // Weight: prefer "current day weight"; "previous day weight" / plain "weight"
+  // are a fallback; "weight change" is ignored.
+  if (/weight/.test(c) && !/change/.test(c)) {
+    return /current/.test(c) ? "weight" : "weightFallback";
+  }
   return null;
+}
+
+function cellNumber(row: unknown[], idx: number): number | null {
+  if (idx < 0) return null;
+  const v = row[idx];
+  if (v === null || v === undefined || v === "") return null;
+  const n =
+    typeof v === "number" ? v : Number(String(v).replace(/[%,\s]/g, ""));
+  return Number.isFinite(n) ? n : null;
 }
 
 function findHeaderRow(rows: unknown[][]): { index: number; cols: ColMap } | null {
@@ -61,6 +79,8 @@ function findHeaderRow(rows: unknown[][]): { index: number; cols: ColMap } | nul
       exchange: -1,
       currency: -1,
       notes: -1,
+      weight: -1,
+      weightFallback: -1,
     };
     let matches = 0;
     row.forEach((cell, idx) => {
@@ -166,6 +186,8 @@ export function parseBasketWorkbook(buffer: Buffer | ArrayBuffer): BasketImportR
       exchange: cellString(row, cols.exchange) ?? normalized.exchange,
       currency: cellString(row, cols.currency) ?? normalized.currency,
       notes: cellString(row, cols.notes),
+      weight:
+        cellNumber(row, cols.weight) ?? cellNumber(row, cols.weightFallback),
     });
   }
 

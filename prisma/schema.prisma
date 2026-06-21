@@ -65,6 +65,10 @@ model UserSettings {
   userId        String   @unique
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   baseCurrency  String   @default("USD")
+  // Optional per-account display currency overrides, JSON: { "<accountKey>": "GBP" }.
+  // Used for each account's Holdings section and the dashboard when filtered to
+  // that account; the global "All accounts" view always uses baseCurrency.
+  accountCurrencies String?
   // PriceInterval: MANUAL | M5 | M15 | M30 | H1 | DAILY
   priceInterval String   @default("MANUAL")
   theme         String   @default("system") // "light" | "dark" | "system"
@@ -183,6 +187,8 @@ model WatchlistItem {
   exchange    String?
   currency    String?
   notes       String?
+  // Optional basket allocation weight (%) imported from a basket.xlsx.
+  weight      Float?
   createdAt   DateTime  @default(now())
 
   @@unique([watchlistId, yahooSymbol])

@@ -12,6 +12,8 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/feedback";
 import { useTheme } from "@/components/theme-provider";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
+import { AccountCurrencies } from "@/components/settings/account-currencies";
+import { FxRates } from "@/components/settings/fx-rates";
 import { initialsFromName } from "@/lib/utils";
 
 const INTERVALS = [
@@ -345,6 +347,8 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+          <AccountCurrencies />
+          <FxRates />
         </div>
       </div>
     </div>

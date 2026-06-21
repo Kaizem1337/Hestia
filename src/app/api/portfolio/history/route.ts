@@ -2,6 +2,7 @@ import { getUserId, ensureUserSettings } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { getPriceHistory } from "@/lib/market-data/history";
 import { getRatesToBase } from "@/lib/fx";
+import { SUPPORTED_CURRENCY_CODES } from "@/lib/currency";
 import { ok, unauthorized, withErrorHandling } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +21,13 @@ export const GET = withErrorHandling(async (req: Request) => {
   const scope = url.searchParams.get("scope") ?? "ALL";
 
   const settings = await ensureUserSettings(userId);
-  const base = settings.baseCurrency;
+  // Optional target currency (used when the dashboard is filtered to an account
+  // with its own display currency); falls back to the user's base currency.
+  const currencyParam = url.searchParams.get("currency");
+  const base =
+    currencyParam && SUPPORTED_CURRENCY_CODES.includes(currencyParam as never)
+      ? currencyParam
+      : settings.baseCurrency;
 
   // scope is "ALL", a source (MANUAL/TRADING212/IBKR), or an account key.
   const where =

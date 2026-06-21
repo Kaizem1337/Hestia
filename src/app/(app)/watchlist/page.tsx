@@ -23,6 +23,7 @@ import { Skeleton, EmptyState, ErrorState, Badge } from "@/components/ui/feedbac
 import { SymbolSearch } from "@/components/symbol-search";
 import { BasketImportDialog } from "@/components/watchlist/basket-import-dialog";
 import { WatchlistItemEditDialog } from "@/components/watchlist/watchlist-item-edit-dialog";
+import { StockLogo } from "@/components/holdings/stock-logo";
 import { formatCurrency, formatPercent, timeAgo } from "@/lib/utils";
 import { toneClass } from "@/components/ui/value";
 import type {
@@ -42,6 +43,9 @@ export default function WatchlistPage() {
   const [newName, setNewName] = useState("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [sortBy, setSortBy] = useState<"default" | "weightDesc" | "weightAsc">(
+    "default"
+  );
 
   const sections = wl.data?.watchlists ?? [];
   const effectiveTarget =
@@ -246,7 +250,34 @@ export default function WatchlistPage() {
 
       {!wl.loading && (
         <div className="space-y-6">
-          {sections.map((section, idx) => (
+          {totalItems > 0 && (
+            <div className="flex items-center justify-end gap-2 text-sm">
+              <span className="text-muted-foreground">Sort</span>
+              <Select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                className="h-9 w-48"
+              >
+                <option value="default">Default order</option>
+                <option value="weightDesc">Weight: high → low</option>
+                <option value="weightAsc">Weight: low → high</option>
+              </Select>
+            </div>
+          )}
+          {sections.map((section, idx) => {
+            const maxWeight = Math.max(
+              0,
+              ...section.items.map((i) => i.weight ?? 0)
+            );
+            const items =
+              sortBy === "default"
+                ? section.items
+                : [...section.items].sort((a, b) => {
+                    const wa = a.weight ?? -Infinity;
+                    const wb = b.weight ?? -Infinity;
+                    return sortBy === "weightDesc" ? wb - wa : wa - wb;
+                  });
+            return (
             <Card key={section.id} className="overflow-hidden">
               {/* Section header */}
               <div className="flex items-center gap-2 border-b border-border px-4 py-3">
@@ -327,39 +358,53 @@ export default function WatchlistPage() {
                 </p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[680px] text-sm">
+                  <table className="w-full table-auto whitespace-nowrap text-sm">
                     <thead>
                       <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                        <th className="px-4 py-2.5 font-medium">Symbol</th>
-                        <th className="px-4 py-2.5 font-medium">Name</th>
+                        <th className="px-4 py-2.5 font-medium">Instrument</th>
                         <th className="px-4 py-2.5 text-right font-medium">Price</th>
                         <th className="px-4 py-2.5 text-right font-medium">Change</th>
-                        <th className="px-4 py-2.5 font-medium">Notes</th>
-                        <th className="px-4 py-2.5 text-right font-medium">Updated</th>
+                        <th className="px-4 py-2.5 font-medium">Weight</th>
+                        <th className="hidden px-4 py-2.5 font-medium lg:table-cell">Notes</th>
+                        <th className="hidden px-4 py-2.5 text-right font-medium xl:table-cell">Updated</th>
                         <th className="px-2 py-2.5" />
                       </tr>
                     </thead>
                     <tbody>
-                      {section.items.map((item) => (
+                      {items.map((item) => (
                         <tr
                           key={item.id}
                           className="border-b border-border/60 last:border-0 hover:bg-muted/40"
                         >
                           <td className="px-4 py-3">
-                            <span className="font-semibold">{item.symbol}</span>
-                            {item.stale && (
-                              <span
-                                className="ml-2 text-[10px] text-amber-500"
-                                title="Price unavailable — try a Yahoo symbol override"
-                              >
-                                no price
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">
-                            <span className="block max-w-[200px] truncate">
-                              {item.name || item.yahooSymbol}
-                            </span>
+                            <div className="flex items-center gap-3">
+                              <StockLogo
+                                holding={{
+                                  symbol: item.symbol,
+                                  yahooSymbol: item.yahooSymbol,
+                                  name: item.name,
+                                  isin: null,
+                                  logoUrl: null,
+                                }}
+                                size={30}
+                              />
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold">{item.symbol}</span>
+                                  {item.stale && (
+                                    <span
+                                      className="text-[10px] text-amber-500"
+                                      title="Price unavailable — try a Yahoo symbol override"
+                                    >
+                                      no price
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="max-w-[200px] truncate text-xs text-muted-foreground">
+                                  {item.name || item.yahooSymbol}
+                                </p>
+                              </div>
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-right tabular">
                             {formatCurrency(item.price, item.currency || "USD")}
@@ -371,12 +416,36 @@ export default function WatchlistPage() {
                           >
                             {formatPercent(item.changePercent, { signed: true })}
                           </td>
-                          <td className="px-4 py-3 text-muted-foreground">
+                          <td className="px-4 py-3">
+                            {item.weight != null ? (
+                              <div className="flex items-center gap-2">
+                                <div className="h-1.5 w-16 overflow-hidden rounded-full bg-white/[0.06]">
+                                  <div
+                                    className="h-full rounded-full"
+                                    style={{
+                                      width: `${
+                                        maxWeight > 0
+                                          ? (item.weight / maxWeight) * 100
+                                          : 0
+                                      }%`,
+                                      background: "hsl(var(--violet))",
+                                    }}
+                                  />
+                                </div>
+                                <span className="tabular text-xs text-muted-foreground">
+                                  {item.weight.toFixed(1)}%
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="hidden px-4 py-3 text-muted-foreground lg:table-cell">
                             <span className="block max-w-[160px] truncate">
                               {item.notes || "—"}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right text-xs text-muted-foreground">
+                          <td className="hidden px-4 py-3 text-right text-xs text-muted-foreground xl:table-cell">
                             {timeAgo(item.priceAsOf)}
                           </td>
                           <td className="px-2 py-3 text-right">
@@ -404,7 +473,8 @@ export default function WatchlistPage() {
                 </div>
               )}
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 

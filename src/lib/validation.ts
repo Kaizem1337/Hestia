@@ -56,6 +56,8 @@ export const settingsUpdateSchema = z.object({
   baseCurrency: currencyEnum.optional(),
   priceInterval: priceIntervalEnum.optional(),
   theme: z.enum(["light", "dark", "system"]).optional(),
+  // Per-account display currency overrides: { "<accountKey>": "GBP" }.
+  accountCurrencies: z.record(z.string(), currencyEnum).optional(),
 });
 
 export const holdingCreateSchema = z.object({
@@ -76,6 +78,9 @@ export const holdingUpdateSchema = z.object({
   avgCost: z.coerce.number().min(0).optional(),
   name: z.string().trim().max(200).optional().nullable(),
   currency: z.string().trim().min(2).max(8).optional(),
+  // Manual Yahoo symbol override (used when auto-detected prices are missing,
+  // e.g. a Taipei Exchange ticker that should be .TWO instead of .TW).
+  yahooSymbol: z.string().trim().min(1).max(40).optional(),
   // ISO date (YYYY-MM-DD) or full ISO string; empty/null clears the date.
   purchaseDate: z.string().trim().optional().nullable(),
 });
@@ -173,6 +178,7 @@ export const basketConfirmSchema = z.object({
         exchange: z.string().optional().nullable(),
         currency: z.string().optional().nullable(),
         notes: z.string().optional().nullable(),
+        weight: z.number().optional().nullable(),
       })
     )
     .min(1),

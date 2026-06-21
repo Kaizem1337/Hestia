@@ -36,6 +36,13 @@ export interface EnrichedHolding {
   baseGainLoss: number | null;
   baseGainLossPercent: number | null;
   baseDayChange: number | null;
+  // Per-account display currency (= baseCurrency unless overridden in settings).
+  accountCurrency: string;
+  accountMarketValue: number | null;
+  accountCostBasis: number;
+  accountGainLoss: number | null;
+  accountGainLossPercent: number | null;
+  accountDayChange: number | null;
   allocationPercent: number | null;
   priceAsOf: string | null;
   stale: boolean;
@@ -133,9 +140,44 @@ export async function getPortfolio(
     currencies.add(h.currency);
   }
 
-  const fxMap = await getRatesToBase(Array.from(currencies), baseCurrency);
+  const fxMap = await getRatesToBase(Array.from(currencies), baseCurrency, {
+    force: opts.force,
+  });
   let hasMissingFx = false;
   let fxAsOf: Date | null = null;
+
+  // Per-account display-currency overrides ({ accountKey: "GBP" }). The global
+  // "All accounts" view uses baseCurrency; each account section / filtered
+  // dashboard can show its own currency. Fetch FX once per distinct override.
+  let accountCurrencyMap: Record<string, string> = {};
+  try {
+    accountCurrencyMap = settings.accountCurrencies
+      ? (JSON.parse(settings.accountCurrencies) as Record<string, string>)
+      : {};
+  } catch {
+    accountCurrencyMap = {};
+  }
+  const acctKeyOf = (h: (typeof holdings)[number]) =>
+    resolveAccount(
+      h.source,
+      h.accountKey,
+      nickMap.get(`${h.source}::${h.accountKey || ""}`)
+    ).accountKey;
+  const acctCurrencies = new Set<string>();
+  for (const h of holdings) {
+    const cur = accountCurrencyMap[acctKeyOf(h)];
+    if (cur && cur !== baseCurrency) acctCurrencies.add(cur);
+  }
+  const fxByCurrency = new Map<
+    string,
+    Awaited<ReturnType<typeof getRatesToBase>>
+  >();
+  for (const cur of acctCurrencies) {
+    fxByCurrency.set(
+      cur,
+      await getRatesToBase(Array.from(currencies), cur, { force: opts.force })
+    );
+  }
 
   // First pass: compute base market values to derive allocation %.
   type Interim = {
@@ -149,7 +191,14 @@ export async function getPortfolio(
   };
   const interim: Interim[] = holdings.map((h) => {
     const q = quotes.get(h.yahooSymbol);
-    const norm = normalizePrice(q?.price ?? null, q?.currency ?? null);
+    // Cash positions carry no market quote — they are valued 1:1 in their own
+    // currency (then converted to base/account currency by FX like everything).
+    const cash =
+      h.symbol.toUpperCase() === "CASH" ||
+      h.yahooSymbol.toUpperCase().startsWith("CASH");
+    const norm = cash
+      ? { price: 1, currency: h.currency }
+      : normalizePrice(q?.price ?? null, q?.currency ?? null);
     const priceCurrency = norm.currency ?? h.currency;
     const price = norm.price;
     const fx = fxMap.get(priceCurrency);
@@ -206,6 +255,33 @@ export async function getPortfolio(
         ? (baseMarketVal / totalBaseMarketValue) * 100
         : null;
 
+    // Per-account currency figures (default to the global base unless the
+    // account has a currency override configured in settings).
+    const accountCurrency = accountCurrencyMap[acc.accountKey] || baseCurrency;
+    let accountMarketValue = baseMarketVal;
+    let accountCostBasis = baseCostBasis;
+    let accountGainLoss = baseGainLoss;
+    let accountGainLossPercent = baseGainLossPercent;
+    let accountDayChange = baseDayChange;
+    if (accountCurrency !== baseCurrency) {
+      const afx = fxByCurrency.get(accountCurrency);
+      const aRate = afx?.get(priceCurrency)?.rate ?? 1;
+      const aCostRate = afx?.get(h.currency)?.rate ?? aRate;
+      accountMarketValue =
+        nativeMarketValue !== null ? nativeMarketValue * aRate : null;
+      accountCostBasis = nativeCostBasis * aCostRate;
+      accountGainLoss =
+        accountMarketValue !== null
+          ? accountMarketValue - accountCostBasis
+          : null;
+      accountGainLossPercent =
+        accountGainLoss !== null && accountCostBasis > 0
+          ? (accountGainLoss / accountCostBasis) * 100
+          : null;
+      accountDayChange =
+        nativeDayChange !== null ? nativeDayChange * aRate : null;
+    }
+
     return {
       id: h.id,
       symbol: h.symbol,
@@ -236,6 +312,12 @@ export async function getPortfolio(
       baseGainLoss,
       baseGainLossPercent,
       baseDayChange,
+      accountCurrency,
+      accountMarketValue,
+      accountCostBasis,
+      accountGainLoss,
+      accountGainLossPercent,
+      accountDayChange,
       allocationPercent,
       priceAsOf: q?.asOf ? q.asOf.toISOString() : null,
       stale: q?.stale ?? true,

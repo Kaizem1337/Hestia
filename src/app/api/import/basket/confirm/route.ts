@@ -53,6 +53,7 @@ export const POST = withErrorHandling(async (req: Request) => {
           exchange: item.exchange ?? null,
           currency: item.currency ?? null,
           notes: item.notes ?? null,
+          weight: item.weight ?? null,
         },
       });
       imported += 1;

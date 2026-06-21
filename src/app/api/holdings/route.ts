@@ -28,6 +28,9 @@ export const POST = withErrorHandling(async (req: Request) => {
         avgCost: d.avgCost,
         source: d.source,
         accountName: d.accountName ?? null,
+        // Scope to the chosen account (matches broker-import behaviour);
+        // "" for Manual entries.
+        accountKey: d.accountName ?? "",
       },
     });
     return ok({ holding }, { status: 201 });

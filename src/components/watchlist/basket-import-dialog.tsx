@@ -15,6 +15,7 @@ interface BasketItem {
   exchange?: string | null;
   currency?: string | null;
   notes?: string | null;
+  weight?: number | null;
 }
 interface Preview {
   items: BasketItem[];
@@ -181,6 +182,7 @@ export function BasketImportDialog({
                   <th className="px-3 py-2 font-medium">Name</th>
                   <th className="px-3 py-2 font-medium">Exch.</th>
                   <th className="px-3 py-2 font-medium">Ccy</th>
+                  <th className="px-3 py-2 text-right font-medium">Weight</th>
                 </tr>
               </thead>
               <tbody>
@@ -197,6 +199,9 @@ export function BasketImportDialog({
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {it.currency || "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular text-muted-foreground">
+                      {it.weight != null ? `${it.weight.toFixed(2)}%` : "—"}
                     </td>
                   </tr>
                 ))}
